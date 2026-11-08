@@ -106,14 +106,14 @@
   </section>
 
   <section>
-    <h2>Weekly volume by muscle group</h2>
+    <h2>Weekly sets by muscle group</h2>
     <div class="controls">
       <span class="seggroup" id="volRange" role="group" aria-label="Range">
         <button class="seg" data-weeks="26" aria-pressed="true">26 weeks</button>
         <button class="seg" data-weeks="52">52 weeks</button>
         <button class="seg" data-weeks="0">All</button>
       </span>
-      <span class="muted" style="font-size:13px">weight × reps, lb. Bodyweight sets and cardio are not counted.</span>
+      <span class="muted" style="font-size:13px">working sets per week, bodyweight sets included, cardio not counted.</span>
     </div>
     <div class="chart"><canvas id="volChart"></canvas></div>
     <ul class="legend" id="volLegend"></ul>
@@ -181,8 +181,8 @@ document.getElementById("subtitle").innerHTML =
 (function tiles() {
   const in28 = [...trainingDays].filter(d => dayNum(d) > dayNum(today) - 28).length;
   const prev28 = [...trainingDays].filter(d => dayNum(d) > dayNum(today) - 56 && dayNum(d) <= dayNum(today) - 28).length;
-  const vol28 = ex.filter(e => dayNum(e.d) > dayNum(today) - 28).reduce((a, e) => a + (e.vol || 0), 0);
-  const volPrev = ex.filter(e => dayNum(e.d) > dayNum(today) - 56 && dayNum(e.d) <= dayNum(today) - 28).reduce((a, e) => a + (e.vol || 0), 0);
+  const sets28 = DATA.sets.filter(s => dayNum(s.d) > dayNum(today) - 28).length;
+  const setsPrev = DATA.sets.filter(s => dayNum(s.d) > dayNum(today) - 56 && dayNum(s.d) <= dayNum(today) - 28).length;
   const since = dayNum(today) - dayNum(lastDate);
   const bw = DATA.bodyweight.length ? DATA.bodyweight[DATA.bodyweight.length - 1] : null;
   const delta = (cur, prev, unit) => {
@@ -192,7 +192,7 @@ document.getElementById("subtitle").innerHTML =
   };
   const tiles = [
     { label: "Sessions, last 4 weeks", value: in28, extra: delta(in28, prev28, "") },
-    { label: "Volume, last 4 weeks (lb)", value: fmtNum(vol28), extra: delta(vol28, volPrev, "") },
+    { label: "Sets, last 4 weeks", value: sets28, extra: delta(sets28, setsPrev, "") },
     { label: "Days since last session", value: since },
     { label: "Training days total", value: trainingDays.size },
     bw ? { label: "Last weigh-in (lb)", value: fmtNum(bw.lb), extra: `<div class="delta">${fmtDate(bw.d)}</div>` } : null,
@@ -331,7 +331,7 @@ let volWeeks = 26, volChart;
 function weekStart(iso) { const n = dayNum(iso); const dow = (n + 4) % 7; /* 1970-01-01 was Thursday */ return isoFromDay(n - ((dow + 6) % 7)); }
 function renderVolume() {
   const weeks = {};
-  for (const e of ex) { if (!e.vol) continue; const w = weekStart(e.d); (weeks[w] ||= {})[e.g] = ((weeks[w] || {})[e.g] || 0) + e.vol; }
+  for (const s of DATA.sets) { const g = (exNames[s.ex] || {}).g; if (!g) continue; const w = weekStart(s.d); (weeks[w] ||= {})[g] = ((weeks[w] || {})[g] || 0) + 1; }
   let labels = Object.keys(weeks).sort();
   const first = labels[0], last = weekStart(today);
   const allWeeks = []; for (let d = first; d <= last; d = addDays(d, 7)) allWeeks.push(d);
@@ -352,13 +352,13 @@ function renderVolume() {
         legend: { display: false },
         tooltip: { ...tooltipStyle(), callbacks: {
           title: (items) => "Week of " + fmtDate(items[0].label),
-          label: (item) => item.raw ? `${item.dataset.label}: ${fmtNum(item.raw)} lb` : null,
-          footer: (items) => "Total: " + fmtNum(items.reduce((a, i) => a + i.raw, 0)) + " lb",
+          label: (item) => item.raw ? `${item.dataset.label}: ${item.raw} sets` : null,
+          footer: (items) => "Total: " + items.reduce((a, i) => a + i.raw, 0) + " sets",
         }, filter: (item) => item.raw > 0 },
       },
       scales: {
         x: { stacked: true, ...sc, grid: { ...sc.grid, display: false }, ticks: { ...sc.ticks, maxTicksLimit: 12, callback: function (v) { return fmtDate(this.getLabelForValue(v)); } } },
-        y: { stacked: true, ...sc, beginAtZero: true, ticks: { ...sc.ticks, callback: (v) => fmtNum(v) } },
+        y: { stacked: true, ...sc, beginAtZero: true, ticks: { ...sc.ticks, precision: 0 }, title: { display: true, text: "sets", color: css("--muted") } },
       },
     },
   };
