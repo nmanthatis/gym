@@ -26,6 +26,13 @@ Python 3.12, standard library only.
 The built `index.html` and the cleaned tables are not committed; the workflow regenerates them.
 One-time setup in the repository: Settings -> Pages -> Source: **GitHub Actions**.
 
+## Clean tabs in the workbook
+
+The workbook has two extra tabs, **Clean sessions** and **Clean sets**, each a single `IMPORTDATA`
+formula pointing at the published CSVs (`https://nmanthatis.github.io/gym/data/exercises.csv` and
+`.../sets.csv`). They refresh on their own after each daily build, so they are a live view of the
+cleaned log, not a copy to edit.
+
 ## Conventions the cleaner applies
 
 - weight but no reps -> 10 reps (`reps_defaulted=1` in `sets.csv`, shown as `*` in the dashboard)
