@@ -1,0 +1,5 @@
+data/
+dashboard/index.html
+dashboard/data/
+.claude/
+__pycache__/

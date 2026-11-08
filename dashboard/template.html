@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workout Progress</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+    --seq1: #cde2fb; --seq2: #9ec5f4; --seq3: #6da7ec; --seq4: #3987e5; --seq5: #256abf; --seq6: #184f95;
+    --good: #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+      --seq1: #184f95; --seq2: #1c5cab; --seq3: #256abf; --seq4: #3987e5; --seq5: #6da7ec; --seq6: #9ec5f4;
+      --good: #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --seq1: #184f95; --seq2: #1c5cab; --seq3: #256abf; --seq4: #3987e5; --seq5: #6da7ec; --seq6: #9ec5f4;
+    --good: #0ca30c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
+  h2 { font-size: 16px; margin: 0 0 12px; font-weight: 600; }
+  .sub { color: var(--ink-2); margin: 0 0 20px; font-size: 14px; }
+  .sub a { color: inherit; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .tile .label { color: var(--ink-2); font-size: 13px; }
+  .tile .value { font-size: 30px; font-weight: 600; line-height: 1.15; margin-top: 2px; }
+  .tile .delta { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+  .tile .delta.up { color: var(--good); }
+  section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 12px; }
+  select, button { font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--axis); border-radius: 6px; padding: 5px 8px; }
+  button.seg { border-radius: 6px; cursor: pointer; }
+  button.seg[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  .seggroup { display: inline-flex; gap: 4px; }
+  .chart { position: relative; height: 300px; }
+  .chart.short { height: 240px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); margin: 8px 0 0; padding: 0; list-style: none; }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .legend .ln { width: 16px; height: 2px; display: inline-block; border-radius: 1px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--ink-2); font-weight: 600; font-size: 13px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+  .pr { font-size: 14px; color: var(--ink-2); margin: 0 0 10px; }
+  .pr b { color: var(--ink); font-weight: 600; }
+  .cal { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 12px); gap: 3px; overflow-x: auto; padding-bottom: 6px; }
+  .cal .c { width: 12px; height: 12px; border-radius: 3px; background: var(--grid); }
+  .months { display: grid; grid-auto-flow: column; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .calwrap { overflow-x: auto; }
+  .calkey { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .calkey .c { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  details summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
+  .tablewrap { max-height: 420px; overflow: auto; }
+  footer { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Workout Progress</h1>
+  <p class="sub" id="subtitle"></p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section>
+    <h2>Exercise progress</h2>
+    <div class="controls">
+      <select id="exSelect" aria-label="Exercise"></select>
+      <span class="seggroup" id="exRange" role="group" aria-label="Range">
+        <button class="seg" data-days="180">6 months</button>
+        <button class="seg" data-days="365">1 year</button>
+        <button class="seg" data-days="0" aria-pressed="true">All</button>
+      </span>
+    </div>
+    <p class="pr" id="exPr"></p>
+    <div class="chart"><canvas id="exChart"></canvas></div>
+    <ul class="legend" id="exLegend"></ul>
+    <div id="bwBlock" hidden>
+      <h2 style="margin-top:16px;font-size:14px">Bodyweight sets: best reps per session</h2>
+      <div class="chart short"><canvas id="bwChart"></canvas></div>
+    </div>
+    <details style="margin-top:12px">
+      <summary>Recent sessions</summary>
+      <div class="tablewrap"><table id="exTable"></table></div>
+    </details>
+  </section>
+
+  <section>
+    <h2>Weekly volume by muscle group</h2>
+    <div class="controls">
+      <span class="seggroup" id="volRange" role="group" aria-label="Range">
+        <button class="seg" data-weeks="26" aria-pressed="true">26 weeks</button>
+        <button class="seg" data-weeks="52">52 weeks</button>
+        <button class="seg" data-weeks="0">All</button>
+      </span>
+      <span class="muted" style="font-size:13px">weight × reps, lb. Bodyweight sets and cardio are not counted.</span>
+    </div>
+    <div class="chart"><canvas id="volChart"></canvas></div>
+    <ul class="legend" id="volLegend"></ul>
+  </section>
+
+  <section>
+    <h2>Training days, last 52 weeks</h2>
+    <div class="calwrap">
+      <div class="months" id="calMonths"></div>
+      <div class="cal" id="cal"></div>
+    </div>
+    <div class="calkey" id="calKey"></div>
+  </section>
+
+  <section>
+    <h2>Personal records</h2>
+    <div class="controls">
+      <select id="prGroup" aria-label="Muscle group"></select>
+      <span class="muted" style="font-size:13px">Estimated 1RM uses the Epley formula on the best set.</span>
+    </div>
+    <div class="tablewrap"><table id="prTable"></table></div>
+  </section>
+
+  <footer id="footer"></footer>
+</main>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+const GROUPS = ["Back", "Chest", "Legs", "Shoulders", "Biceps", "Triceps", "Core"];
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const GROUP_COLOR = () => Object.fromEntries(GROUPS.map((g, i) => [g, css(`--s${i + 1}`)]));
+const fmtDate = (iso) => { const d = new Date(iso + "T00:00:00"); return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" }); };
+const fmtNum = (n) => n == null ? "" : (Math.abs(n) >= 10000 ? (n / 1000).toFixed(1) + "K" : (Math.round(n * 10) / 10).toLocaleString());
+const dayNum = (iso) => Math.round(new Date(iso + "T00:00:00Z").getTime() / 86400000);
+const isoFromDay = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
+const addDays = (iso, n) => isoFromDay(dayNum(iso) + n);
+
+const ex = DATA.exercises.slice().sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0);
+const setsByKey = {};
+for (const s of DATA.sets) (setsByKey[s.d + "|" + s.ex] ||= []).push(s);
+const lastDate = ex.length ? ex[ex.length - 1].d : DATA.generated;
+const trainingDays = new Set(ex.map(e => e.d).concat(DATA.cardio.map(c => c.d)));
+const today = DATA.generated;
+
+Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+Chart.defaults.font.size = 12;
+function baseScales() {
+  return {
+    color: css("--muted"),
+    grid: { color: css("--grid"), lineWidth: 1, drawTicks: false },
+    border: { color: css("--axis") },
+    ticks: { color: css("--muted"), padding: 6 },
+  };
+}
+function tooltipStyle() {
+  return { backgroundColor: css("--ink"), titleColor: css("--surface"), bodyColor: css("--surface"), padding: 8, cornerRadius: 6, displayColors: true, boxPadding: 4 };
+}
+
+/* ---------- subtitle + tiles ---------- */
+document.getElementById("subtitle").innerHTML =
+  `Log through <b>${fmtDate(lastDate)}</b> · ${trainingDays.size} training days since ${fmtDate(ex[0].d)} · ` +
+  `<a href="https://docs.google.com/spreadsheets/d/1qX5deDZkB5k19U3lQRmMnEAOmzti3eAyl2iSCcC9BHM/edit">open the sheet</a>`;
+
+(function tiles() {
+  const in28 = [...trainingDays].filter(d => dayNum(d) > dayNum(today) - 28).length;
+  const prev28 = [...trainingDays].filter(d => dayNum(d) > dayNum(today) - 56 && dayNum(d) <= dayNum(today) - 28).length;
+  const vol28 = ex.filter(e => dayNum(e.d) > dayNum(today) - 28).reduce((a, e) => a + (e.vol || 0), 0);
+  const volPrev = ex.filter(e => dayNum(e.d) > dayNum(today) - 56 && dayNum(e.d) <= dayNum(today) - 28).reduce((a, e) => a + (e.vol || 0), 0);
+  const since = dayNum(today) - dayNum(lastDate);
+  const bw = DATA.bodyweight.length ? DATA.bodyweight[DATA.bodyweight.length - 1] : null;
+  const delta = (cur, prev, unit) => {
+    if (!prev) return "";
+    const d = cur - prev; const cls = d > 0 ? "up" : "";
+    return `<div class="delta ${cls}">${d > 0 ? "+" : ""}${fmtNum(d)}${unit} vs previous 4 weeks</div>`;
+  };
+  const tiles = [
+    { label: "Sessions, last 4 weeks", value: in28, extra: delta(in28, prev28, "") },
+    { label: "Volume, last 4 weeks (lb)", value: fmtNum(vol28), extra: delta(vol28, volPrev, "") },
+    { label: "Days since last session", value: since },
+    { label: "Training days total", value: trainingDays.size },
+    bw ? { label: "Last weigh-in (lb)", value: fmtNum(bw.lb), extra: `<div class="delta">${fmtDate(bw.d)}</div>` } : null,
+  ].filter(Boolean);
+  document.getElementById("tiles").innerHTML = tiles.map(t =>
+    `<div class="tile"><div class="label">${t.label}</div><div class="value">${t.value}</div>${t.extra || ""}</div>`).join("");
+})();
+
+/* ---------- exercise progress ---------- */
+const exNames = {};
+for (const e of ex) { exNames[e.ex] ||= { g: e.g, m: e.m, n: 0, last: e.d }; exNames[e.ex].n++; exNames[e.ex].last = e.d; }
+const exSelect = document.getElementById("exSelect");
+for (const g of GROUPS.concat(["Unknown"])) {
+  const names = Object.keys(exNames).filter(n => exNames[n].g === g).sort((a, b) => exNames[b].n - exNames[a].n);
+  if (!names.length) continue;
+  const og = document.createElement("optgroup"); og.label = g;
+  for (const n of names) { const o = document.createElement("option"); o.value = n; o.textContent = `${n} (${exNames[n].n})`; og.appendChild(o); }
+  exSelect.appendChild(og);
+}
+let exRangeDays = 0;
+let exChart, bwChart;
+exSelect.value = Object.keys(exNames).sort((a, b) => exNames[b].n - exNames[a].n)[0];
+
+function renderExercise() {
+  const name = exSelect.value;
+  const meta = exNames[name];
+  let rows = ex.filter(e => e.ex === name && e.n > 0);
+  const all = rows;
+  if (exRangeDays) rows = rows.filter(e => dayNum(e.d) > dayNum(today) - exRangeDays);
+  const weightMode = meta.m === "weight" || meta.m === "mixed";
+  const c1 = css("--s1"), c2 = css("--s2"), surface = css("--surface");
+  let datasets, yTitle, legend;
+  if (weightMode) {
+    datasets = [
+      { label: "Best set weight", data: rows.filter(e => e.bw != null).map(e => ({ x: dayNum(e.d), y: e.bw, e })), borderColor: c1, backgroundColor: c1 },
+      { label: "Estimated 1RM", data: rows.filter(e => e.e1 != null).map(e => ({ x: dayNum(e.d), y: e.e1, e })), borderColor: c2, backgroundColor: c2 },
+    ];
+    yTitle = "lb";
+    legend = [["Best set weight", c1], ["Estimated 1RM", c2]];
+  } else {
+    const unit = meta.m === "seconds" ? "seconds" : "reps";
+    datasets = [{ label: `Best set (${unit})`, data: rows.filter(e => e.br != null).map(e => ({ x: dayNum(e.d), y: e.br, e })), borderColor: c1, backgroundColor: c1 }];
+    yTitle = unit;
+    legend = [];
+  }
+  for (const d of datasets) Object.assign(d, { borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: surface, pointBorderWidth: 2, tension: 0, spanGaps: true });
+
+  // PR line
+  const prEl = document.getElementById("exPr");
+  if (weightMode) {
+    const best = all.filter(e => e.e1 != null).reduce((b, e) => (!b || e.e1 > b.e1) ? e : b, null);
+    const bestW = all.filter(e => e.bw != null).reduce((b, e) => (!b || e.bw > b.bw || (e.bw === b.bw && e.br > b.br)) ? e : b, null);
+    prEl.innerHTML = best ? `Best estimated 1RM <b>${fmtNum(best.e1)} lb</b> (${fmtNum(best.bw)} × ${fmtNum(best.br)} on ${fmtDate(best.d)}) · heaviest set <b>${fmtNum(bestW.bw)} lb × ${fmtNum(bestW.br)}</b> on ${fmtDate(bestW.d)} · ${all.length} sessions, last ${fmtDate(meta.last)}` : `${all.length} sessions, bodyweight only · last ${fmtDate(meta.last)}`;
+  } else {
+    const best = all.filter(e => e.br != null).reduce((b, e) => (!b || e.br > b.br) ? e : b, null);
+    prEl.innerHTML = best ? `Best set <b>${fmtNum(best.br)}</b> on ${fmtDate(best.d)} · ${all.length} sessions, last ${fmtDate(meta.last)}` : `${all.length} sessions`;
+  }
+  document.getElementById("exLegend").innerHTML = legend.map(([l, c]) => `<li><span class="ln" style="background:${c}"></span>${l}</li>`).join("");
+
+  const sc = baseScales();
+  const cfg = {
+    type: "line",
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: "nearest", axis: "x", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { ...tooltipStyle(), callbacks: {
+          title: (items) => fmtDate(items[0].raw.e.d),
+          label: (item) => `${item.dataset.label}: ${fmtNum(item.raw.y)} ${yTitle}`,
+          afterBody: (items) => { const e = items[0].raw.e; const s = (setsByKey[e.d + "|" + e.ex] || []).map(setLabel).join(", "); return [s, e.notes ? "note: " + e.notes : ""].filter(Boolean); },
+        } },
+      },
+      scales: {
+        x: { type: "linear", ...sc, grid: { ...sc.grid, display: false }, ticks: { ...sc.ticks, maxTicksLimit: 8, callback: (v) => fmtDate(isoFromDay(Math.round(v))) } },
+        y: { ...sc, beginAtZero: false, title: { display: true, text: yTitle, color: css("--muted") } },
+      },
+    },
+  };
+  if (exChart) exChart.destroy();
+  exChart = new Chart(document.getElementById("exChart"), cfg);
+
+  // bodyweight-only sets (pull-ups, dips, ...) get their own reps chart, one unit per axis
+  const bwBest = {};
+  for (const s of DATA.sets) if (s.ex === name && s.bwt && s.r != null && (!exRangeDays || dayNum(s.d) > dayNum(today) - exRangeDays)) bwBest[s.d] = Math.max(bwBest[s.d] || 0, s.r);
+  const bwDays = Object.keys(bwBest).sort();
+  const block = document.getElementById("bwBlock");
+  if (bwChart) { bwChart.destroy(); bwChart = null; }
+  if (weightMode && bwDays.length >= 3) {
+    block.hidden = false;
+    const c3 = css("--s3");
+    bwChart = new Chart(document.getElementById("bwChart"), {
+      type: "line",
+      data: { datasets: [{ label: "Best bodyweight set", data: bwDays.map(d => ({ x: dayNum(d), y: bwBest[d], d })), borderColor: c3, backgroundColor: c3, borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: surface, pointBorderWidth: 2, tension: 0 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: "nearest", axis: "x", intersect: false },
+        plugins: { legend: { display: false }, tooltip: { ...tooltipStyle(), callbacks: {
+          title: (items) => fmtDate(items[0].raw.d),
+          label: (item) => `${fmtNum(item.raw.y)} reps`,
+          afterBody: (items) => (setsByKey[items[0].raw.d + "|" + name] || []).map(setLabel).join(", "),
+        } } },
+        scales: {
+          x: { type: "linear", ...sc, grid: { ...sc.grid, display: false }, ticks: { ...sc.ticks, maxTicksLimit: 8, callback: (v) => fmtDate(isoFromDay(Math.round(v))) } },
+          y: { ...sc, beginAtZero: true, title: { display: true, text: "reps", color: css("--muted") } },
+        },
+      },
+    });
+  } else {
+    block.hidden = true;
+  }
+
+  // table of recent sessions
+  const recent = all.slice(-15).reverse();
+  document.getElementById("exTable").innerHTML =
+    `<tr><th>Date</th><th>Sets</th><th class="num">Volume</th><th class="num">Est. 1RM</th><th>Notes</th></tr>` +
+    recent.map(e => `<tr><td>${fmtDate(e.d)}</td><td>${(setsByKey[e.d + "|" + e.ex] || []).map(setLabel).join(", ")}</td><td class="num">${fmtNum(e.vol)}</td><td class="num">${fmtNum(e.e1)}</td><td class="muted">${e.notes || ""}</td></tr>`).join("");
+}
+function setLabel(s) {
+  const reps = s.r == null ? "?" : fmtNum(s.r) + (s.dflt ? "*" : "");
+  if (s.bwt || s.w == null) return `BW×${reps}`;
+  if (s.w < 0) return `assist ${fmtNum(-s.w)}×${reps}`;
+  return `${fmtNum(s.w)}×${reps}`;
+}
+exSelect.addEventListener("change", renderExercise);
+document.getElementById("exRange").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button"); if (!b) return;
+  exRangeDays = +b.dataset.days;
+  for (const x of b.parentElement.querySelectorAll("button")) x.setAttribute("aria-pressed", x === b);
+  renderExercise();
+});
+
+/* ---------- weekly volume ---------- */
+let volWeeks = 26, volChart;
+function weekStart(iso) { const n = dayNum(iso); const dow = (n + 4) % 7; /* 1970-01-01 was Thursday */ return isoFromDay(n - ((dow + 6) % 7)); }
+function renderVolume() {
+  const weeks = {};
+  for (const e of ex) { if (!e.vol) continue; const w = weekStart(e.d); (weeks[w] ||= {})[e.g] = ((weeks[w] || {})[e.g] || 0) + e.vol; }
+  let labels = Object.keys(weeks).sort();
+  const first = labels[0], last = weekStart(today);
+  const allWeeks = []; for (let d = first; d <= last; d = addDays(d, 7)) allWeeks.push(d);
+  labels = volWeeks ? allWeeks.slice(-volWeeks) : allWeeks;
+  const colors = GROUP_COLOR(); const surface = css("--surface");
+  const datasets = GROUPS.map(g => ({
+    label: g, data: labels.map(w => (weeks[w] || {})[g] || 0), backgroundColor: colors[g], borderColor: surface, borderWidth: 1, borderSkipped: false, maxBarThickness: 24, borderRadius: 2,
+  }));
+  document.getElementById("volLegend").innerHTML = GROUPS.map(g => `<li><span class="sw" style="background:${colors[g]}"></span>${g}</li>`).join("");
+  const sc = baseScales();
+  const cfg = {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { ...tooltipStyle(), callbacks: {
+          title: (items) => "Week of " + fmtDate(items[0].label),
+          label: (item) => item.raw ? `${item.dataset.label}: ${fmtNum(item.raw)} lb` : null,
+          footer: (items) => "Total: " + fmtNum(items.reduce((a, i) => a + i.raw, 0)) + " lb",
+        }, filter: (item) => item.raw > 0 },
+      },
+      scales: {
+        x: { stacked: true, ...sc, grid: { ...sc.grid, display: false }, ticks: { ...sc.ticks, maxTicksLimit: 12, callback: function (v) { return fmtDate(this.getLabelForValue(v)); } } },
+        y: { stacked: true, ...sc, beginAtZero: true, ticks: { ...sc.ticks, callback: (v) => fmtNum(v) } },
+      },
+    },
+  };
+  if (volChart) volChart.destroy();
+  volChart = new Chart(document.getElementById("volChart"), cfg);
+}
+document.getElementById("volRange").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button"); if (!b) return;
+  volWeeks = +b.dataset.weeks;
+  for (const x of b.parentElement.querySelectorAll("button")) x.setAttribute("aria-pressed", x === b);
+  renderVolume();
+});
+
+/* ---------- calendar ---------- */
+(function calendar() {
+  const setsPerDay = {};
+  for (const s of DATA.sets) setsPerDay[s.d] = (setsPerDay[s.d] || 0) + 1;
+  for (const c of DATA.cardio) setsPerDay[c.d] = (setsPerDay[c.d] || 0) + 1;
+  const end = today; const start = addDays(weekStart(end), -7 * 51);
+  const steps = ["--seq1", "--seq2", "--seq3", "--seq4", "--seq5", "--seq6"];
+  const level = (n) => n === 0 ? null : n <= 4 ? 0 : n <= 9 ? 1 : n <= 14 ? 2 : n <= 19 ? 3 : n <= 25 ? 4 : 5;
+  const cells = [], months = []; let lastMonth = "";
+  for (let d = start, i = 0; d <= end; d = addDays(d, 1), i++) {
+    const n = setsPerDay[d] || 0; const lv = level(n);
+    const bg = lv == null ? "" : `style="background:${css(steps[lv])}"`;
+    cells.push(`<div class="c" ${bg} title="${fmtDate(d)}: ${n ? n + " sets" : "rest"}"></div>`);
+    if (i % 7 === 0) { const m = d.slice(0, 7); months.push(m !== lastMonth ? new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short" }) : ""); lastMonth = m; }
+  }
+  document.getElementById("cal").innerHTML = cells.join("");
+  document.getElementById("calMonths").innerHTML = months.map(m => `<span style="width:15px">${m}</span>`).join("");
+  document.getElementById("calKey").innerHTML = `rest <span class="c" style="background:var(--grid)"></span>` + steps.map(s => `<span class="c" style="background:${css(s)}"></span>`).join("") + ` 25+ sets`;
+})();
+
+/* ---------- PR table ---------- */
+const prGroup = document.getElementById("prGroup");
+prGroup.innerHTML = `<option value="">All groups</option>` + GROUPS.map(g => `<option>${g}</option>`).join("");
+function renderPR() {
+  const g = prGroup.value;
+  const rows = Object.keys(exNames).filter(n => !g || exNames[n].g === g).map(n => {
+    const all = ex.filter(e => e.ex === n);
+    const best = all.filter(e => e.e1 != null).reduce((b, e) => (!b || e.e1 > b.e1) ? e : b, null);
+    const bestR = all.filter(e => e.br != null).reduce((b, e) => (!b || e.br > b.br) ? e : b, null);
+    return { n, g: exNames[n].g, sessions: all.length, last: exNames[n].last, best, bestR, m: exNames[n].m };
+  }).sort((a, b) => GROUPS.indexOf(a.g) - GROUPS.indexOf(b.g) || b.sessions - a.sessions);
+  document.getElementById("prTable").innerHTML =
+    `<tr><th>Exercise</th><th class="num">Est. 1RM</th><th>Best set</th><th>When</th><th class="num">Sessions</th><th>Last done</th></tr>` +
+    rows.map(r => {
+      const b = r.best;
+      const bestSet = b ? `${fmtNum(b.bw)} × ${fmtNum(b.br)}` : (r.bestR ? `${fmtNum(r.bestR.br)} ${r.m === "seconds" ? "s" : "reps"}` : "");
+      const when = b ? fmtDate(b.d) : (r.bestR ? fmtDate(r.bestR.d) : "");
+      return `<tr><td>${r.n}</td><td class="num">${b ? fmtNum(b.e1) : ""}</td><td>${bestSet}</td><td>${when}</td><td class="num">${r.sessions}</td><td>${fmtDate(r.last)}</td></tr>`;
+    }).join("");
+}
+prGroup.addEventListener("change", renderPR);
+
+/* ---------- footer ---------- */
+document.getElementById("footer").textContent =
+  `Built ${fmtDate(DATA.generated)} from the sheet export. ${DATA.sets.length.toLocaleString()} sets, ${DATA.exercises.length.toLocaleString()} exercise-days, ${DATA.cardio.length} cardio entries. ` +
+  `* = reps not logged, assumed 10. ${DATA.anomalies} rows needed a correction or were skipped; see data/clean/anomalies.csv.`;
+
+renderExercise(); renderVolume(); renderPR();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderExercise(); renderVolume(); renderPR(); });
+</script>
+</body>
+</html>
