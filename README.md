@@ -53,7 +53,10 @@ cleaned log, not a copy to edit.
   or overrides a wrong one (logged in `anomalies.csv`)
 - an unnamed data row directly under a named empty row takes that name
 - date typos that jump back by about a year are corrected to the neighbouring year
-- `?`, `(`, `)` are stripped from numbers; a weight under 15 next to reps over 45 is swapped
+- `?`, `(`, `)` are stripped from numbers; a weight under 15 next to reps over 30 is swapped
+- on a weighted exercise, reps over 30 are a typo: with a weight the reps are dropped (defaulted to
+  10, flag `reps_implausible`); with no weight the value is a weight typed in the reps column
+  (flag `weight_in_reps_column`)
 
 Anything the script changed, guessed or dropped is listed in `data/clean/anomalies.csv` with the sheet row number.
 

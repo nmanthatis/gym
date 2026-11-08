@@ -32,6 +32,9 @@ DEFAULT_REPS = 10
 ASSIST_RULE = {"B: Pullups": (40, date(2024, 3, 1)), "Ch: Dips": (20, date(2024, 7, 1))}
 BODYWEIGHT_EXERCISES = {"B: Pullups", "Ch: Dips", "B: Muscle Ups"}
 REPS_IN_WEIGHT_MAX = 15
+# on a weighted exercise, a rep count above REPS_MAX is a typo: with a weight the reps are dropped
+# (defaulted), without a weight the value is a weight typed into the reps column
+REPS_MAX = 30
 GROUP_PREFIX = {"B": "Back", "Bi": "Biceps", "Ch": "Chest", "Sh": "Shoulders",
                 "Tr": "Triceps", "L": "Legs", "Co": "Core", "Ca": "Cardio"}
 
@@ -236,7 +239,7 @@ def main() -> int:
                 flags.add(wflag)
             if w is None and r is None:
                 continue
-            if measure == "weight" and w is not None and r is not None and w < 15 and r >= 45:
+            if measure == "weight" and w is not None and r is not None and w < 15 and r > REPS_MAX:
                 note(row_no, f"set {k} looks swapped ({fmt(w)} lb x {fmt(r)})", f"read as {fmt(r)} lb x {fmt(w)}", f"{w_s}/{r_s}")
                 w, r = r, w
                 flags.add("swapped")
@@ -260,6 +263,15 @@ def main() -> int:
             if measure == "mixed":
                 if w is not None and r is None and w <= 30:
                     parsed.append((k, None, w, True, False)); continue
+            if measure == "weight" and canonical not in BODYWEIGHT_EXERCISES and r is not None and r > REPS_MAX:
+                if w is None:
+                    note(row_no, f"set {k} has {fmt(r)} in the reps column and no weight", f"read as {fmt(r)} lb x {DEFAULT_REPS}", r_s)
+                    w, r = r, None
+                    flags.add("weight_in_reps_column")
+                else:
+                    note(row_no, f"set {k} reps {fmt(r)} implausible at {fmt(w)} lb", f"reps dropped, defaulted to {DEFAULT_REPS}", f"{w_s}/{r_s}")
+                    r = None
+                    flags.add("reps_implausible")
             if w is None:
                 bodyweight = True
             elif r is None:

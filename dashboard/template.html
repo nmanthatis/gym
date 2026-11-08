@@ -152,7 +152,7 @@
     <h2>Personal records</h2>
     <div class="controls">
       <select id="prGroup" aria-label="Muscle group"></select>
-      <span class="muted" style="font-size:13px">Estimated 1RM uses the Epley formula on the best set.</span>
+      <span class="muted" style="font-size:13px">Estimated 1RM uses the Epley formula; * marks reps that were blank in the log (counted as 10).</span>
     </div>
     <div class="tablewrap"><table id="prTable"></table></div>
   </section>
@@ -224,6 +224,24 @@ document.getElementById("subtitle").innerHTML =
 /* ---------- exercise progress ---------- */
 const exNames = {};
 for (const e of ex) { exNames[e.ex] ||= { g: e.g, m: e.m, n: 0, last: e.d }; exNames[e.ex].n++; exNames[e.ex].last = e.d; }
+
+// records per exercise, from the individual sets: the set with the best Epley 1RM, the heaviest
+// set (ties broken by reps) and the most reps in any set. Assisted (negative) and bodyweight sets
+// never count for 1RM or heaviest.
+const epley = (w, r) => w * (1 + r / 30);
+function recordsOf(name) {
+  let e1 = null, heavy = null, reps = null;
+  for (const s of DATA.sets) {
+    if (s.ex !== name) continue;
+    if (s.r != null && (!reps || s.r > reps.r)) reps = s;
+    if (s.bwt || s.w == null || s.w <= 0 || s.r == null) continue;
+    const e = epley(s.w, s.r);
+    if (!e1 || e > e1.e) e1 = { ...s, e };
+    if (!heavy || s.w > heavy.w || (s.w === heavy.w && s.r > heavy.r)) heavy = s;
+  }
+  return { e1, heavy, reps };
+}
+const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
 
 /* ---------- today ---------- */
 (function todaySection() {
@@ -366,9 +384,8 @@ function renderExercise() {
   // PR line
   const prEl = document.getElementById("exPr");
   if (weightMode) {
-    const best = all.filter(e => e.e1 != null).reduce((b, e) => (!b || e.e1 > b.e1) ? e : b, null);
-    const bestW = all.filter(e => e.bw != null).reduce((b, e) => (!b || e.bw > b.bw || (e.bw === b.bw && e.br > b.br)) ? e : b, null);
-    prEl.innerHTML = best ? `Best estimated 1RM <b>${fmtNum(best.e1)} lb</b> (${fmtNum(best.bw)} × ${fmtNum(best.br)} on ${fmtDate(best.d)}) · heaviest set <b>${fmtNum(bestW.bw)} lb × ${fmtNum(bestW.br)}</b> on ${fmtDate(bestW.d)} · ${all.length} sessions, last ${fmtDate(meta.last)}` : `${all.length} sessions, bodyweight only · last ${fmtDate(meta.last)}`;
+    const { e1, heavy } = recordsOf(name);
+    prEl.innerHTML = e1 ? `Best estimated 1RM <b>${fmtNum(e1.e)} lb</b> (${setTxt(e1)} on ${fmtDate(e1.d)}) · heaviest set <b>${setTxt(heavy)}</b> on ${fmtDate(heavy.d)} · ${all.length} sessions, last ${fmtDate(meta.last)}` : `${all.length} sessions, bodyweight only · last ${fmtDate(meta.last)}`;
   } else {
     const best = all.filter(e => e.br != null).reduce((b, e) => (!b || e.br > b.br) ? e : b, null);
     prEl.innerHTML = best ? `Best set <b>${fmtNum(best.br)}</b> on ${fmtDate(best.d)} · ${all.length} sessions, last ${fmtDate(meta.last)}` : `${all.length} sessions`;
@@ -521,18 +538,14 @@ prGroup.innerHTML = `<option value="">All groups</option>` + GROUPS.map(g => `<o
 function renderPR() {
   const g = prGroup.value;
   const rows = Object.keys(exNames).filter(n => !g || exNames[n].g === g).map(n => {
-    const all = ex.filter(e => e.ex === n);
-    const best = all.filter(e => e.e1 != null).reduce((b, e) => (!b || e.e1 > b.e1) ? e : b, null);
-    const bestR = all.filter(e => e.br != null).reduce((b, e) => (!b || e.br > b.br) ? e : b, null);
-    return { n, g: exNames[n].g, sessions: all.length, last: exNames[n].last, best, bestR, m: exNames[n].m };
+    return { n, g: exNames[n].g, sessions: exNames[n].n, last: exNames[n].last, m: exNames[n].m, ...recordsOf(n) };
   }).sort((a, b) => GROUPS.indexOf(a.g) - GROUPS.indexOf(b.g) || b.sessions - a.sessions);
+  const cell = (s, txt) => s ? `${txt} <span class="muted">${fmtDate(s.d)}</span>` : "";
   document.getElementById("prTable").innerHTML =
-    `<tr><th>Exercise</th><th class="num">Est. 1RM</th><th>Best set</th><th>When</th><th class="num">Sessions</th><th>Last done</th></tr>` +
+    `<tr><th>Exercise</th><th class="num">Est. 1RM</th><th>From set</th><th>Heaviest set</th><th class="num">Sessions</th><th>Last done</th></tr>` +
     rows.map(r => {
-      const b = r.best;
-      const bestSet = b ? `${fmtNum(b.bw)} × ${fmtNum(b.br)}` : (r.bestR ? `${fmtNum(r.bestR.br)} ${r.m === "seconds" ? "s" : "reps"}` : "");
-      const when = b ? fmtDate(b.d) : (r.bestR ? fmtDate(r.bestR.d) : "");
-      return `<tr><td>${r.n}</td><td class="num">${b ? fmtNum(b.e1) : ""}</td><td>${bestSet}</td><td>${when}</td><td class="num">${r.sessions}</td><td>${fmtDate(r.last)}</td></tr>`;
+      const from = r.e1 ? cell(r.e1, setTxt(r.e1)) : cell(r.reps, r.reps ? `${fmtNum(r.reps.r)} ${r.m === "seconds" ? "s" : "reps"}` : "");
+      return `<tr><td>${r.n}</td><td class="num">${r.e1 ? fmtNum(r.e1.e) : ""}</td><td>${from}</td><td>${cell(r.heavy, r.heavy ? setTxt(r.heavy) : "")}</td><td class="num">${r.sessions}</td><td>${fmtDate(r.last)}</td></tr>`;
     }).join("");
 }
 prGroup.addEventListener("change", renderPR);
