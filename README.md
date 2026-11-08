@@ -19,6 +19,12 @@ then open `dashboard/index.html` in a browser. Steps, individually:
 
 Python 3.12, standard library only.
 
+## Today section
+
+The dashboard opens with a suggested session for today. The rules (rotation, overdue override,
+weekly set targets, double progression) are written in `PHILOSOPHY.md`; the implementation is the
+`todaySection` block in `dashboard/template.html`. Change the numbers in both places together.
+
 ## Hosted version
 
 `.github/workflows/update.yml` runs the same three steps on GitHub Actions every day at 09:00 UTC

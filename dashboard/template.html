@@ -45,6 +45,19 @@
   .tile .value { font-size: 30px; font-weight: 600; line-height: 1.15; margin-top: 2px; }
   .tile .delta { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
   .tile .delta.up { color: var(--good); }
+  .today h2 { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+  .today h2 .why { font-weight: 400; color: var(--ink-2); font-size: 14px; }
+  .today td.ex { font-weight: 600; }
+  .today .addon td { border-top: 2px solid var(--axis); }
+  .meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 24px; margin-top: 14px; }
+  .meter { font-size: 13px; }
+  .meter .lbl { display: flex; justify-content: space-between; color: var(--ink-2); margin-bottom: 3px; }
+  .meter .lbl b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .meter .bar { position: relative; height: 8px; border-radius: 4px; background: var(--seq1); overflow: visible; }
+  .meter .fill { height: 100%; border-radius: 4px; background: var(--seq4); }
+  .meter .fill.low { background: var(--s2); }
+  .meter .min { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--ink-2); }
+  .meter.overdue .lbl b { color: var(--s2); }
   section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 12px; }
   select, button { font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--axis); border-radius: 6px; padding: 5px 8px; }
@@ -81,6 +94,13 @@
   <p class="sub" id="subtitle"></p>
 
   <div class="tiles" id="tiles"></div>
+
+  <section class="today">
+    <h2 id="todayTitle"></h2>
+    <table id="todayTable"></table>
+    <div class="meters" id="meters"></div>
+    <p class="muted" style="font-size:13px;margin:12px 0 0">Rules: rotation Chest, Shoulders, Back, Legs, Legs + accessories; a group trained in the last 2 days is skipped; a group under its weekly minimum or untrained for 9+ days is overdue and can override. Weights follow double progression, 8 to 12 reps. Sets from pressing count half for shoulders and triceps, pulling counts half for biceps. See PHILOSOPHY.md in the repo.</p>
+  </section>
 
   <section>
     <h2>Exercise progress</h2>
@@ -204,6 +224,109 @@ document.getElementById("subtitle").innerHTML =
 /* ---------- exercise progress ---------- */
 const exNames = {};
 for (const e of ex) { exNames[e.ex] ||= { g: e.g, m: e.m, n: 0, last: e.d }; exNames[e.ex].n++; exNames[e.ex].last = e.d; }
+
+/* ---------- today ---------- */
+(function todaySection() {
+  const ROTATION = ["Chest", "Shoulders", "Back", "Legs", "Legs + accessories"];
+  const MAIN = { "Chest": ["Chest"], "Shoulders": ["Shoulders"], "Back": ["Back"], "Legs": ["Legs"], "Legs + accessories": ["Legs"] };
+  const ACCESSORY = ["Biceps", "Triceps", "Core"];
+  const TARGET = { Chest: [10, 6], Back: [10, 6], Shoulders: [10, 6], Legs: [10, 6], Biceps: [6, 4], Triceps: [6, 4], Core: [6, 4] };
+  const now = new Date(); const todayIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const tnum = dayNum(todayIso);
+
+  // sets per group per day (direct), and classification of each training day
+  const byDay = {};
+  for (const s of DATA.sets) { const g = (exNames[s.ex] || {}).g; if (!g) continue; (byDay[s.d] ||= {})[g] = ((byDay[s.d] || {})[g] || 0) + 1; }
+  const days = Object.keys(byDay).sort();
+  const classify = (d) => {
+    const c = byDay[d]; let best = null;
+    for (const g of ["Chest", "Shoulders", "Back", "Legs"]) if ((c[g] || 0) > ((best && c[best]) || 0)) best = g;
+    if (!best) return null;
+    if (best === "Legs" && ((c.Biceps || 0) + (c.Triceps || 0) + (c.Core || 0)) >= 2) return "Legs + accessories";
+    return best;
+  };
+  const history = days.map(classify).filter(Boolean);
+  const lastType = history[history.length - 1];
+
+  // fractional sets in the last 7 days, and days since each group was trained
+  const frac = {}, since = {};
+  for (const g of Object.keys(TARGET)) { frac[g] = 0; since[g] = Infinity; }
+  for (const d of days) {
+    const c = byDay[d]; const age = tnum - dayNum(d);
+    for (const g in c) { if (since[g] !== undefined) since[g] = Math.min(since[g], age); }
+    if (age < 7 && age >= 0) {
+      for (const g in c) { if (frac[g] !== undefined) frac[g] += c[g]; }
+      frac.Shoulders += 0.5 * (c.Chest || 0); frac.Triceps += 0.5 * ((c.Chest || 0) + (c.Shoulders || 0)); frac.Biceps += 0.5 * (c.Back || 0);
+    }
+  }
+  const overdue = Object.keys(TARGET).filter(g => frac[g] < TARGET[g][1] || since[g] >= 9);
+  const recent48 = (g) => since[g] <= 2;
+
+  // choose the session
+  let idx = lastType ? (ROTATION.indexOf(lastType) + 1) % 5 : 0;
+  const reasons = [];
+  for (let tries = 0; tries < 5; tries++) {
+    const t = ROTATION[idx];
+    if (MAIN[t].some(recent48)) { reasons.push(`${t} skipped, ${MAIN[t].join("/").toLowerCase()} trained ${since[MAIN[t][0]]} day${since[MAIN[t][0]] === 1 ? "" : "s"} ago`); idx = (idx + 1) % 5; } else break;
+  }
+  let session = ROTATION[idx];
+  let why = lastType ? `next in rotation after ${lastType}` : "first session";
+  const covers = (t) => MAIN[t].filter(g => overdue.includes(g)).length + (t === "Legs + accessories" ? ACCESSORY.filter(g => overdue.includes(g)).length : 0);
+  if (overdue.length >= 2) {
+    const bestT = ROTATION.filter(t => !MAIN[t].some(recent48)).sort((a, b) => covers(b) - covers(a) || ((ROTATION.indexOf(a) - idx + 5) % 5) - ((ROTATION.indexOf(b) - idx + 5) % 5))[0];
+    if (bestT && covers(bestT) > covers(session)) { session = bestT; why = `overdue: ${overdue.map(g => g.toLowerCase()).join(", ")}`; }
+  }
+  const mainGroups = MAIN[session];
+  const addonGroups = overdue.filter(g => !mainGroups.includes(g) && !(session === "Legs + accessories" && ACCESSORY.includes(g)));
+
+  // exercise pool per group: frequency in the last 6 months, staples done last session of this group moved to the back
+  const lastDayOf = (g) => days.filter(d => byDay[d][g]).pop();
+  const pool = (g) => {
+    const cut = tnum - 182; const freq = {};
+    for (const e of ex) if (e.g === g && e.n > 0 && dayNum(e.d) > cut && e.m !== "other") freq[e.ex] = (freq[e.ex] || 0) + 1;
+    const lastD = lastDayOf(g); const doneLast = new Set(ex.filter(e => e.d === lastD && e.g === g).map(e => e.ex));
+    return Object.keys(freq).sort((a, b) => (doneLast.has(a) - doneLast.has(b)) || freq[b] - freq[a]);
+  };
+  const lastPerf = (name) => ex.filter(e => e.ex === name && e.n > 0).pop();
+  const suggest = (name) => {
+    const e = lastPerf(name); if (!e) return { last: "no history", plan: "3 × 8-12, find a weight you can do for 10" };
+    const sets = (setsByKey[e.d + "|" + e.ex] || []);
+    const m = exNames[name].m;
+    const lastTxt = `${fmtDate(e.d)}: ${sets.map(setLabel).join(", ")}`;
+    if (m === "reps" || m === "seconds") { const best = Math.max(...sets.map(s => s.r || 0)); return { last: lastTxt, plan: `3 sets, aim for ${best + (m === "seconds" ? 10 : 1)}${m === "seconds" ? " s" : " reps"} on the best set` }; }
+    const weighted = sets.filter(s => s.w != null && s.w > 0);
+    if (!weighted.length) {
+      const reps = sets.map(s => s.r || 0); const allHigh = reps.length && reps.every(r => r >= 12);
+      return { last: lastTxt, plan: allHigh ? "add 5 lb, 3 × 8-12" : "bodyweight, 3 × 8-12" };
+    }
+    const top = Math.max(...weighted.map(s => s.w));
+    let work = weighted.filter(s => s.w >= 0.75 * top); if (!work.length) work = weighted;
+    const reps = work.map(s => s.r || 0); const allHigh = reps.every(r => r >= 12); const anyLow = reps.some(r => r < 8);
+    const step = 5; const wt = top;
+    let plan, next;
+    if (allHigh) { next = wt + step; plan = `${fmtNum(next)} lb × 3 × 8-12 (all sets hit 12, add ${step})`; }
+    else if (anyLow) { next = wt - step; plan = `${fmtNum(next)} lb × 3 × 8-12, or ${fmtNum(wt)} aiming for 8s (a set fell under 8)`; }
+    else { next = wt; plan = `${fmtNum(wt)} lb × 3, beat ${Math.max(...reps)} reps`; }
+    return { last: lastTxt, plan };
+  };
+
+  const rows = [];
+  const pick = (g, n, label) => { const p = pool(g).slice(0, n); for (const name of p) rows.push({ name, g, label, ...suggest(name) }); };
+  if (session === "Legs") pick("Legs", 5);
+  else if (session === "Legs + accessories") { pick("Legs", 3); const acc = ACCESSORY.slice().sort((a, b) => (frac[a] - TARGET[a][1]) - (frac[b] - TARGET[b][1])); for (const g of acc.slice(0, 2)) pick(g, 1, "accessory"); rows.push({ name: "PT exercise, if any", g: "", label: "accessory", last: "", plan: "your call" }); }
+  else pick(session, 4);
+  for (const g of addonGroups) { const p = pool(g)[0]; if (p) rows.push({ name: p, g, label: "add-on", ...suggest(p), plan: "2 sets, " + suggest(p).plan }); }
+
+  document.getElementById("todayTitle").innerHTML = `Today: ${session} <span class="why">${why}${reasons.length ? " · " + reasons.join("; ") : ""}</span>`;
+  document.getElementById("todayTable").innerHTML =
+    `<tr><th>Exercise</th><th>Last time</th><th>Today</th></tr>` +
+    rows.map(r => `<tr class="${r.label === "add-on" ? "addon" : ""}"><td class="ex">${r.name}${r.label ? ` <span class="muted" style="font-weight:400">${r.label}${r.label === "add-on" ? ", " + r.g.toLowerCase() + " overdue" : ""}</span>` : ""}</td><td class="muted">${r.last}</td><td>${r.plan}</td></tr>`).join("");
+  document.getElementById("meters").innerHTML = Object.keys(TARGET).map(g => {
+    const [t, mn] = TARGET[g]; const v = frac[g]; const pct = Math.min(100, 100 * v / t); const od = overdue.includes(g);
+    const sinceTxt = since[g] === Infinity ? "never" : since[g] === 0 ? "today" : `${since[g]} d ago`;
+    return `<div class="meter ${od ? "overdue" : ""}"><div class="lbl"><span>${g} <span class="muted">· ${sinceTxt}</span></span><b>${fmtNum(v)} / ${t}</b></div><div class="bar"><div class="fill ${v < mn ? "low" : ""}" style="width:${pct}%"></div><div class="min" style="left:${100 * mn / t}%" title="minimum ${mn}"></div></div></div>`;
+  }).join("") + `<div class="meter muted" style="align-self:end">sets in the last 7 days vs target · tick = minimum</div>`;
+})();
 const exSelect = document.getElementById("exSelect");
 for (const g of GROUPS.concat(["Unknown"])) {
   const names = Object.keys(exNames).filter(n => exNames[n].g === g).sort((a, b) => exNames[b].n - exNames[a].n);
