@@ -27,9 +27,20 @@ weekly set targets, double progression) are written in `PHILOSOPHY.md`; the impl
 
 ## Muscle map
 
-Under Today, a front and back body figure is shaded by working sets in the last 10 days. For now
-the shading is per muscle group: every region of a group shows the group's total (`REGION` in the
-`muscleMap` block of `dashboard/template.html`). The figure's outline and muscle paths are in
+Under Today, a front and back body figure is shaded by working sets per muscle in the last 10 days.
+
+- `config/exercise_muscles.csv` says which muscles each exercise trains: `primary` muscles get the
+  full set, `secondary` muscles half a set (`;` separated). An exercise without a row credits the
+  main muscles of its group (`FALLBACK` in the `muscleMap` block of `dashboard/template.html`).
+- The 24 muscle names are the keys of `NAME` in that block: `chest-upper`, `chest-lower`,
+  `delt-front`, `delt-side`, `delt-rear`, `traps-upper`, `traps-mid`, `lats`, `teres`,
+  `lower-back`, `biceps`, `triceps`, `forearm`, `abs-upper`, `abs-lower`, `obliques`, `serratus`,
+  `glute-max`, `glute-med`, `quads`, `adductors`, `hamstrings`, `calves`, `tibialis`.
+- The figure draws chest, front deltoid and rear trapezius as single shapes; the page cuts each in
+  two along a line (`cutOf`) to get upper and lower chest, front and side deltoid, upper and
+  mid trapezius. The other regions come from the figure's own shapes (`regionOf`).
+
+The figure's outline and muscle paths are in
 `config/body_paths.json`, extracted with `scripts/extract_body.py` from
 [react-native-body-highlighter](https://github.com/HichamELBSI/react-native-body-highlighter)
 (MIT, licence text in `config/body_paths.LICENSE.txt`).

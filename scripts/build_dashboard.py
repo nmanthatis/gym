@@ -12,6 +12,7 @@ CLEAN = ROOT / "data" / "clean"
 TEMPLATE = ROOT / "dashboard" / "template.html"
 OUT = ROOT / "dashboard" / "index.html"
 BODY = ROOT / "config" / "body_paths.json"
+MUSCLES = ROOT / "config" / "exercise_muscles.csv"
 
 
 def read(name: str) -> list[dict]:
@@ -32,6 +33,8 @@ def main() -> int:
     cardio = read("cardio.csv")
     bodyweight = read("bodyweight.csv")
     anomalies = read("anomalies.csv")
+    with MUSCLES.open(newline="", encoding="utf-8") as f:
+        muscles = list(csv.DictReader(f))
 
     ex_rows = [{
         "d": e["date"], "ex": e["exercise"], "g": e["group"], "m": e["measure"],
@@ -50,6 +53,9 @@ def main() -> int:
         "cardio": [{"d": c["date"], "ex": c["exercise"], "raw": c["raw_values"], "notes": c["notes"]} for c in cardio],
         "bodyweight": [{"d": b["date"], "lb": num(b["bodyweight_lb"])} for b in bodyweight],
         "anomalies": len(anomalies),
+        # exercise -> muscles it trains: p = primary (a full set each), s = secondary (half a set each)
+        "muscles": {m["exercise"]: {"p": [x for x in m["primary"].split(";") if x],
+                                    "s": [x for x in (m["secondary"] or "").split(";") if x]} for m in muscles},
     }
     html = TEMPLATE.read_text(encoding="utf-8").replace("/*__DATA__*/null", json.dumps(payload, separators=(",", ":")))
     # body outline and muscle paths for the muscle map (from react-native-body-highlighter, MIT)

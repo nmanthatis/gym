@@ -67,6 +67,7 @@
   .bodies .part { stroke: var(--surface); stroke-width: 1; vector-effect: non-scaling-stroke; }
   .bodies .part.plain { fill: var(--grid); opacity: .5; }
   .bodies .part.muscle:hover { stroke: var(--ink); stroke-width: 2; }
+  .bodies .cut { stroke: var(--surface); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
   .bodykey { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 6px; font-size: 12px; color: var(--muted); margin-top: 10px; }
   .bodykey .c { width: 22px; height: 12px; border-radius: 3px; display: inline-block; }
   .bodytip { min-height: 20px; text-align: center; font-size: 14px; color: var(--ink-2); margin: 8px 0 0; }
@@ -119,7 +120,7 @@
   <section>
     <h2>Muscle map</h2>
     <div class="controls">
-      <span class="muted" style="font-size:13px">working sets in the last 10 days, by muscle group</span>
+      <span class="muted" style="font-size:13px">working sets per muscle in the last 10 days. An exercise gives a full set to its main muscles and half a set to the ones that assist.</span>
     </div>
     <div class="bodies" id="bodies"></div>
     <p class="bodytip" id="bodyTip"></p>
@@ -405,52 +406,115 @@ let workByDay = {};   // working sets per group per day, filled by the Today sec
 })();
 /* ---------- muscle map ---------- */
 (function muscleMap() {
-  const WINDOW_DAYS = 10;
-  // drawn region -> [muscle group whose sets it shows, display name]. Group level for now:
-  // every leg region shows the legs total, every back region the back total.
-  const REGION = {
-    chest: ["Chest", "Chest"], deltoids: ["Shoulders", "Deltoids"], trapezius: ["Back", "Trapezius"],
-    "upper-back": ["Back", "Upper back and lats"], "lower-back": ["Back", "Lower back"],
-    biceps: ["Biceps", "Biceps"], triceps: ["Triceps", "Triceps"], abs: ["Core", "Abs"], obliques: ["Core", "Obliques"],
-    quadriceps: ["Legs", "Quadriceps"], hamstring: ["Legs", "Hamstrings"], gluteal: ["Legs", "Glutes"],
-    calves: ["Legs", "Calves"], adductors: ["Legs", "Adductors"],
+  const WINDOW_DAYS = 10, ASSUMED_SETS = 3;
+  // regions the figure can show, in display order
+  const NAME = {
+    "chest-upper": "Upper chest", "chest-lower": "Mid and lower chest",
+    "delt-front": "Front deltoid", "delt-side": "Side deltoid", "delt-rear": "Rear deltoid",
+    "traps-upper": "Upper trapezius", "traps-mid": "Mid and lower trapezius", lats: "Lats", teres: "Teres and rear cuff", "lower-back": "Lower back",
+    biceps: "Biceps", triceps: "Triceps", forearm: "Forearms",
+    "abs-upper": "Upper abs", "abs-lower": "Lower abs", obliques: "Obliques", serratus: "Serratus",
+    "glute-max": "Glutes", "glute-med": "Outer glutes", quads: "Quadriceps", adductors: "Adductors", hamstrings: "Hamstrings", calves: "Calves", tibialis: "Shins",
   };
-  const WORD = { Chest: "chest", Shoulders: "shoulder", Back: "back", Biceps: "biceps", Triceps: "triceps", Core: "core", Legs: "leg" };
-  const STEPS = [[1, "--seq2", "1-3"], [4, "--seq3", "4-7"], [8, "--seq4", "8-11"], [12, "--seq5", "12-15"], [16, "--seq6", "16+"]];
+  // an exercise without a row in config/exercise_muscles.csv credits its group's main regions
+  const FALLBACK = { Chest: ["chest-upper", "chest-lower"], Shoulders: ["delt-front", "delt-side", "delt-rear"], Back: ["lats", "traps-mid", "teres"], Biceps: ["biceps"], Triceps: ["triceps"], Core: ["abs-upper", "abs-lower"], Legs: ["quads", "hamstrings", "glute-max"] };
+  const FULL = 10;   // sets at which the shading reaches its strongest colour
   const now = new Date(); const tnum = dayNum(new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
-  const sets = {}, since = {};
-  for (const g of GROUPS) { sets[g] = 0; since[g] = Infinity; }
-  for (const d in workByDay) {
-    const age = tnum - dayNum(d); if (age < 0) continue;
-    for (const g in workByDay[d]) { if (sets[g] === undefined) continue; since[g] = Math.min(since[g], age); if (age < WINDOW_DAYS) sets[g] += workByDay[d][g]; }
-  }
-  const colourOf = (n) => { let c = "--grid"; for (const [from, v] of STEPS) if (n >= from) c = v; return `var(${c})`; };
-  const agoOf = (g) => since[g] === Infinity ? "never trained" : since[g] === 0 ? "trained today" : `last trained ${since[g]} day${since[g] === 1 ? "" : "s"} ago`;
-  const tipOf = (slug, html) => { const [g, name] = REGION[slug]; return `${html ? `<b>${name}</b>` : name}: ${fmtNum(sets[g])} ${WORD[g]} sets in the last ${WINDOW_DAYS} days, ${agoOf(g)}`; };
+
+  // credited sets per region in the window: a primary muscle gets the set, a secondary muscle half of it
+  const val = {}, since = {}, from = {};
+  for (const r in NAME) { val[r] = 0; since[r] = Infinity; from[r] = {}; }
+  const credit = (d, name, n) => {
+    const age = tnum - dayNum(d); if (age < 0) return;
+    const m = DATA.muscles[name]; const prim = m ? m.p : (FALLBACK[(exNames[name] || {}).g] || []); const sec = m ? m.s : [];
+    for (const [list, w] of [[prim, 1], [sec, 0.5]]) for (const r of list) {
+      if (val[r] === undefined) continue;
+      if (w === 1) since[r] = Math.min(since[r], age);
+      if (age < WINDOW_DAYS) { val[r] += w * n; from[r][name] = (from[r][name] || 0) + w * n; }
+    }
+  };
+  for (const s of DATA.sets) if (!s.wu) credit(s.d, s.ex, 1);
+  for (const e of ex) if (e.n === 0 && /\bno_sets\b/.test(e.flags || "")) credit(e.d, e.ex, ASSUMED_SETS);
+
+  // continuous ramp from the lightest to the strongest step of the sequential palette; untouched muscles stay neutral
+  const colourOf = (n) => n < 0.5 ? "var(--grid)" : `color-mix(in srgb, var(--seq6) ${Math.round(100 * Math.min(1, n / FULL))}%, var(--seq1))`;
+  const agoOf = (r) => since[r] === Infinity ? "never trained directly" : since[r] === 0 ? "trained directly today" : `trained directly ${since[r]} day${since[r] === 1 ? "" : "s"} ago`;
+  const fromOf = (r) => Object.entries(from[r]).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, v]) => `${n} ${fmtNum(v)}`).join(", ");
+  const tipOf = (r, html) => `${html ? `<b>${NAME[r]}</b>` : NAME[r]}: ${fmtNum(val[r])} sets in the last ${WINDOW_DAYS} days${val[r] ? ` (${fromOf(r)})` : ""}, ${agoOf(r)}`;
+
+  // which region a drawn shape belongs to, from its slug and position. null = the shape is cut in two.
+  const regionOf = (slug, view, b) => {
+    switch (slug) {
+      case "chest": return null;
+      case "deltoids": return view === "back" ? "delt-rear" : null;
+      case "trapezius": return view === "front" ? "traps-upper" : null;
+      case "upper-back": return b.height > 150 ? "lats" : "teres";
+      case "gluteal": return b.height < 80 ? "glute-med" : "glute-max";
+      case "abs": return b.y + b.height / 2 < 535 ? "abs-upper" : "abs-lower";
+      case "obliques": return b.y < 470 ? "serratus" : "obliques";
+      case "quadriceps": return "quads";
+      case "hamstring": return "hamstrings";
+      case "lower-back": case "biceps": case "triceps": case "forearm": case "adductors": case "calves": case "tibialis": return slug;
+    }
+    return undefined;   // head, hands, feet, knees ...
+  };
+  // the three single shapes that hold two regions, cut along a straight line: [regionA, polygonA, regionB, polygonB, cut line]
+  const cutOf = (slug, b, mid) => {
+    const m = 30, top = b.y - m, bot = b.y + b.height + m;
+    const leftOfMid = b.x + b.width / 2 < mid;
+    const inner = leftOfMid ? b.x + b.width + m : b.x - m, outer = leftOfMid ? b.x - m : b.x + b.width + m;   // inner = towards the spine
+    if (slug === "chest") {
+      const yi = b.y + 0.30 * b.height, yo = b.y + 0.52 * b.height;
+      return ["chest-upper", [[inner, top], [outer, top], [outer, yo], [inner, yi]], "chest-lower", [[inner, yi], [outer, yo], [outer, bot], [inner, bot]], [[inner, yi], [outer, yo]]];
+    }
+    if (slug === "deltoids") {
+      const x0 = leftOfMid ? b.x : b.x + b.width, w = leftOfMid ? b.width : -b.width;   // from the outer edge inwards
+      const xt = x0 + 0.62 * w, xb = x0 + 0.18 * w;
+      return ["delt-front", [[xt, top], [inner, top], [inner, bot], [xb, bot]], "delt-side", [[xt, top], [outer, top], [outer, bot], [xb, bot]], [[xt, top], [xb, bot]]];
+    }
+    const y = b.y + 0.33 * b.height;   // trapezius, back view
+    return ["traps-upper", [[inner, top], [outer, top], [outer, y], [inner, y]], "traps-mid", [[inner, y], [outer, y], [outer, bot], [inner, bot]], [[inner, y], [outer, y]]];
+  };
 
   const bodies = document.getElementById("bodies"), tip = document.getElementById("bodyTip");
   const idle = "Hover or tap a muscle";
-  const draw = (fig) => {
-    const view = (side, label) => {
-      const v = BODY[fig][side];
-      const parts = v.parts.map(p => REGION[p.slug]
-        ? `<path class="part muscle" data-slug="${p.slug}" style="fill:${colourOf(sets[REGION[p.slug][0]])}" d="${p.d}"><title>${tipOf(p.slug, false)}</title></path>`
-        : `<path class="part plain" d="${p.d}"/>`).join("");
-      return `<figure><svg viewBox="${v.viewBox}" role="img" aria-label="${label} of the body, muscles shaded by working sets in the last ${WINDOW_DAYS} days">${v.outline.map(d => `<path class="outline" d="${d}"/>`).join("")}${parts}</svg><figcaption>${label}</figcaption></figure>`;
-    };
-    bodies.innerHTML = view("front", "Front") + view("back", "Back");
-    tip.textContent = idle;
+  const view = (side, label) => {
+    const v = BODY.male[side];
+    return `<figure><svg data-view="${side}" viewBox="${v.viewBox}" role="img" aria-label="${label} of the body, muscles shaded by working sets in the last ${WINDOW_DAYS} days"><defs></defs>` +
+      v.outline.map(d => `<path class="outline" d="${d}"/>`).join("") + v.parts.map(p => `<path class="part" data-slug="${p.slug}" d="${p.d}"/>`).join("") + `</svg><figcaption>${label}</figcaption></figure>`;
   };
-  const show = (ev) => { const p = ev.target.closest(".muscle"); if (p) tip.innerHTML = tipOf(p.dataset.slug, true); };
+  bodies.innerHTML = view("front", "Front") + view("back", "Back");
+  const SVG = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs) => { const e = document.createElementNS(SVG, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  const setRegion = (p, r) => { p.classList.add("muscle"); p.dataset.region = r; p.style.fill = colourOf(val[r]); const t = el("title", {}); t.textContent = tipOf(r, false); p.appendChild(t); };
+  for (const svg of bodies.querySelectorAll("svg")) {
+    const side = svg.dataset.view, vb = svg.viewBox.baseVal, mid = vb.x + vb.width / 2, defs = svg.querySelector("defs");
+    let n = 0;
+    for (const p of [...svg.querySelectorAll("path.part")]) {
+      const b = p.getBBox(); const r = regionOf(p.dataset.slug, side, b);
+      if (r === undefined) { p.classList.add("plain"); continue; }
+      if (r) { setRegion(p, r); continue; }
+      const [ra, pa, rb, pb, line] = cutOf(p.dataset.slug, b, mid); const id = `cut-${side}-${n++}`;
+      const clip = (suffix, child) => { const c = el("clipPath", { id: id + suffix }); c.appendChild(child); defs.appendChild(c); };
+      clip("a", el("polygon", { points: pa.map(q => q.join(",")).join(" ") }));
+      clip("b", el("polygon", { points: pb.map(q => q.join(",")).join(" ") }));
+      clip("s", el("path", { d: p.getAttribute("d") }));
+      const q = p.cloneNode(true);
+      p.setAttribute("clip-path", `url(#${id}a)`); q.setAttribute("clip-path", `url(#${id}b)`);
+      p.after(q); setRegion(p, ra); setRegion(q, rb);
+      q.after(el("line", { class: "cut", x1: line[0][0], y1: line[0][1], x2: line[1][0], y2: line[1][1], "clip-path": `url(#${id}s)` }));
+    }
+  }
+  tip.textContent = idle;
+  const show = (ev) => { const p = ev.target.closest(".muscle"); if (p) tip.innerHTML = tipOf(p.dataset.region, true); };
   bodies.addEventListener("pointerover", show);
   bodies.addEventListener("click", show);
   bodies.addEventListener("pointerleave", () => { tip.textContent = idle; });
-  draw("male");
 
   document.getElementById("bodyKey").innerHTML = `<span>sets</span><span class="c" style="background:var(--grid)"></span><span>0</span>` +
-    STEPS.map(([, v, label]) => `<span class="c" style="background:var(${v});margin-left:6px"></span><span>${label}</span>`).join("");
-  document.getElementById("bodyTable").innerHTML = `<tr><th>Muscle group</th><th>Regions on the figure</th><th class="num">Sets, last ${WINDOW_DAYS} days</th><th>Last trained</th></tr>` +
-    GROUPS.map(g => `<tr><td>${g}</td><td class="muted">${Object.values(REGION).filter(r => r[0] === g).map(r => r[1]).join(", ")}</td><td class="num">${fmtNum(sets[g])}</td><td>${agoOf(g)}</td></tr>`).join("");
+    `<span style="margin-left:8px">1</span><span class="c" style="width:120px;background:linear-gradient(to right, var(--seq1), var(--seq6))"></span><span>${FULL}+</span>`;
+  document.getElementById("bodyTable").innerHTML = `<tr><th>Muscle</th><th class="num">Sets, last ${WINDOW_DAYS} days</th><th>Last direct work</th><th>From</th></tr>` +
+    Object.keys(NAME).map(r => `<tr><td>${NAME[r]}</td><td class="num">${fmtNum(val[r])}</td><td>${agoOf(r).replace("trained directly ", "")}</td><td class="muted">${fromOf(r)}</td></tr>`).join("");
 })();
 
 const exSelect = document.getElementById("exSelect");
