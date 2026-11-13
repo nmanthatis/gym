@@ -81,6 +81,5 @@ without bringing back exercises you dropped months ago.
 For today: the session name and why (next in rotation, or which group is overdue), your last four
 sessions, 4-5 exercises with last performance (sets × reps @ weight), the suggested weight and rep
 target, and any overdue add-on with the days since it was trained. Plus a 7-day bar per group
-against target and minimum, labelled with the days since the last direct training. Direct sets and
-the half credit from indirect work are separate colours and separate numbers, so a group with no
-direct work reads "0 direct + 9 indirect".
+against target and minimum, labelled with the days since the last direct training. The number is direct
+sets only; the bar shows direct sets in blue and the half credit from indirect work in orange.

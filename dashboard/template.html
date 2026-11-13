@@ -368,10 +368,10 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
     const [t, mn] = TARGET[g]; const dv = direct[g], iv = indirect[g]; const od = overdue.includes(g);
     const dPct = Math.min(100, 100 * dv / t), iPct = Math.min(100 - dPct, 100 * iv / t);
     const ago = since[g] === Infinity ? "never" : since[g] === 0 ? "today" : `${since[g]} d ago`;
-    const nums = iv ? `<b>${fmtNum(dv)}</b> direct + <b>${fmtNum(iv)}</b> indirect / ${t}` : `<b>${fmtNum(dv)}</b> / ${t}`;
+    const nums = `<b>${fmtNum(dv)}</b> / ${t}`;
     const seg = (cls, pct, tip) => pct > 0 ? `<div class="fill ${cls}" style="width:${pct}%" title="${tip}"></div>` : "";
     return `<div class="meter"><div class="lbl"><span>${g} <span class="muted">· ${ago}</span>${od ? " · <b>overdue</b>" : ""}</span><span>${nums}</span></div><div class="bar">${seg("", dPct, `${fmtNum(dv)} direct sets`)}${seg("ind", iPct, `${fmtNum(iv)} indirect, half credit from pressing or pulling`)}<div class="min" style="left:${100 * mn / t}%" title="minimum ${mn}"></div></div></div>`;
-  }).join("") + `<div class="meter muted" style="align-self:end"><span class="key" style="background:var(--s1)"></span>direct sets, last 7 days <span class="key" style="background:var(--s2);margin-left:8px"></span>indirect, half credit from pressing or pulling · tick = minimum · days = last direct training</div>`;
+  }).join("") + `<div class="meter muted" style="align-self:end"><span class="key" style="background:var(--s1)"></span>direct <span class="key" style="background:var(--s2);margin-left:8px"></span>indirect · tick = minimum</div>`;
 })();
 const exSelect = document.getElementById("exSelect");
 for (const g of GROUPS.concat(["Unknown"])) {
