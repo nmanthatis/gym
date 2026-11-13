@@ -60,6 +60,17 @@
   .meter .key { display: inline-block; width: 10px; height: 8px; border-radius: 3px; margin: 0 4px 0 0; vertical-align: baseline; }
   .meter .min { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--ink-2); }
   .today .recent { font-size: 13px; color: var(--ink-2); margin: -4px 0 10px; }
+  .bodies { display: flex; justify-content: center; gap: clamp(8px, 4vw, 40px); }
+  .bodies figure { margin: 0; text-align: center; font-size: 13px; color: var(--ink-2); }
+  .bodies svg { width: min(220px, 36vw); height: auto; display: block; }
+  .bodies .outline { fill: none; stroke: var(--axis); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .bodies .part { stroke: var(--surface); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .bodies .part.plain { fill: var(--grid); opacity: .5; }
+  .bodies .part.muscle:hover { stroke: var(--ink); stroke-width: 2; }
+  .bodykey { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 6px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .bodykey .c { width: 22px; height: 12px; border-radius: 3px; display: inline-block; }
+  .bodytip { min-height: 20px; text-align: center; font-size: 14px; color: var(--ink-2); margin: 8px 0 0; }
+  .bodytip b { color: var(--ink); font-weight: 600; }
   section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 12px; }
   select, button { font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--axis); border-radius: 6px; padding: 5px 8px; }
@@ -103,6 +114,24 @@
     <table id="todayTable"></table>
     <div class="meters" id="meters"></div>
     <p class="muted" style="font-size:13px;margin:12px 0 0">Rules: the session is the next one in the rotation Chest, Shoulders, Back, Legs, Legs + accessories after your last session; a group trained in the last 2 days is skipped. Overdue means one thing: not trained directly for 9 or more days. An overdue main group goes ahead of the rotation, other overdue groups become add-ons (two at most). Bars count working sets in the last 7 days: warm-up sets are left out, an exercise logged without numbers counts as 3 sets, pressing counts half for shoulders and triceps, pulling half for biceps. Weights follow double progression, 8 to 12 reps. See PHILOSOPHY.md in the repo.</p>
+  </section>
+
+  <section>
+    <h2>Muscle map</h2>
+    <div class="controls">
+      <span class="muted" style="font-size:13px">working sets in the last 10 days, by muscle group</span>
+      <span class="seggroup" id="bodyFigure" style="margin-left:auto">
+        <button class="seg" data-fig="male">Male figure</button>
+        <button class="seg" data-fig="female">Female figure</button>
+      </span>
+    </div>
+    <div class="bodies" id="bodies"></div>
+    <p class="bodytip" id="bodyTip"></p>
+    <div class="bodykey" id="bodyKey"></div>
+    <details style="margin-top:10px">
+      <summary>Table</summary>
+      <table id="bodyTable"></table>
+    </details>
   </section>
 
   <section>
@@ -165,6 +194,8 @@
 
 <script>
 const DATA = /*__DATA__*/null;
+// body outline and muscle paths: react-native-body-highlighter, MIT, (c) 2022 ELABBASSI Hicham
+const BODY = /*__BODY__*/null;
 
 const GROUPS = ["Back", "Chest", "Legs", "Shoulders", "Biceps", "Triceps", "Core"];
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -246,6 +277,8 @@ function recordsOf(name) {
 }
 const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
 
+let workByDay = {};   // working sets per group per day, filled by the Today section and reused by the muscle map
+
 /* ---------- today ---------- */
 (function todaySection() {
   const ROTATION = ["Chest", "Shoulders", "Back", "Legs", "Legs + accessories"];
@@ -262,6 +295,7 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
   const addSets = (d, g, n) => { if (TARGET[g] === undefined) return; (byDay[d] ||= {})[g] = (byDay[d][g] || 0) + n; };
   for (const s of DATA.sets) if (!s.wu) addSets(s.d, (exNames[s.ex] || {}).g, 1);
   for (const e of ex) if (e.n === 0 && /\bno_sets\b/.test(e.flags || "")) addSets(e.d, e.g, ASSUMED_SETS);
+  workByDay = byDay;
   const days = Object.keys(byDay).sort();
   const classify = (d) => {
     const c = byDay[d]; let best = null;
@@ -373,6 +407,64 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
     return `<div class="meter"><div class="lbl"><span>${g} <span class="muted">· ${ago}</span>${od ? " · <b>overdue</b>" : ""}</span><span>${nums}</span></div><div class="bar">${seg("", dPct, `${fmtNum(dv)} direct sets`)}${seg("ind", iPct, `${fmtNum(iv)} indirect, half credit from pressing or pulling`)}<div class="min" style="left:${100 * mn / t}%" title="minimum ${mn}"></div></div></div>`;
   }).join("") + `<div class="meter muted" style="align-self:end"><span class="key" style="background:var(--s1)"></span>direct <span class="key" style="background:var(--s2);margin-left:8px"></span>indirect · tick = minimum</div>`;
 })();
+/* ---------- muscle map ---------- */
+(function muscleMap() {
+  const WINDOW_DAYS = 10;
+  // drawn region -> [muscle group whose sets it shows, display name]. Group level for now:
+  // every leg region shows the legs total, every back region the back total.
+  const REGION = {
+    chest: ["Chest", "Chest"], deltoids: ["Shoulders", "Deltoids"], trapezius: ["Back", "Trapezius"],
+    "upper-back": ["Back", "Upper back and lats"], "lower-back": ["Back", "Lower back"],
+    biceps: ["Biceps", "Biceps"], triceps: ["Triceps", "Triceps"], abs: ["Core", "Abs"], obliques: ["Core", "Obliques"],
+    quadriceps: ["Legs", "Quadriceps"], hamstring: ["Legs", "Hamstrings"], gluteal: ["Legs", "Glutes"],
+    calves: ["Legs", "Calves"], adductors: ["Legs", "Adductors"],
+  };
+  const WORD = { Chest: "chest", Shoulders: "shoulder", Back: "back", Biceps: "biceps", Triceps: "triceps", Core: "core", Legs: "leg" };
+  const STEPS = [[1, "--seq2", "1-3"], [4, "--seq3", "4-7"], [8, "--seq4", "8-11"], [12, "--seq5", "12-15"], [16, "--seq6", "16+"]];
+  const now = new Date(); const tnum = dayNum(new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+  const sets = {}, since = {};
+  for (const g of GROUPS) { sets[g] = 0; since[g] = Infinity; }
+  for (const d in workByDay) {
+    const age = tnum - dayNum(d); if (age < 0) continue;
+    for (const g in workByDay[d]) { if (sets[g] === undefined) continue; since[g] = Math.min(since[g], age); if (age < WINDOW_DAYS) sets[g] += workByDay[d][g]; }
+  }
+  const colourOf = (n) => { let c = "--grid"; for (const [from, v] of STEPS) if (n >= from) c = v; return `var(${c})`; };
+  const agoOf = (g) => since[g] === Infinity ? "never trained" : since[g] === 0 ? "trained today" : `last trained ${since[g]} day${since[g] === 1 ? "" : "s"} ago`;
+  const tipOf = (slug, html) => { const [g, name] = REGION[slug]; return `${html ? `<b>${name}</b>` : name}: ${fmtNum(sets[g])} ${WORD[g]} sets in the last ${WINDOW_DAYS} days, ${agoOf(g)}`; };
+
+  const bodies = document.getElementById("bodies"), tip = document.getElementById("bodyTip"), figBtns = document.getElementById("bodyFigure");
+  const idle = "Hover or tap a muscle";
+  const draw = (fig) => {
+    const view = (side, label) => {
+      const v = BODY[fig][side];
+      const parts = v.parts.map(p => REGION[p.slug]
+        ? `<path class="part muscle" data-slug="${p.slug}" style="fill:${colourOf(sets[REGION[p.slug][0]])}" d="${p.d}"><title>${tipOf(p.slug, false)}</title></path>`
+        : `<path class="part plain" d="${p.d}"/>`).join("");
+      return `<figure><svg viewBox="${v.viewBox}" role="img" aria-label="${label} of the body, muscles shaded by working sets in the last ${WINDOW_DAYS} days">${v.outline.map(d => `<path class="outline" d="${d}"/>`).join("")}${parts}</svg><figcaption>${label}</figcaption></figure>`;
+    };
+    bodies.innerHTML = view("front", "Front") + view("back", "Back");
+    for (const b of figBtns.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.fig === fig);
+    tip.textContent = idle;
+  };
+  const show = (ev) => { const p = ev.target.closest(".muscle"); if (p) tip.innerHTML = tipOf(p.dataset.slug, true); };
+  bodies.addEventListener("pointerover", show);
+  bodies.addEventListener("click", show);
+  bodies.addEventListener("pointerleave", () => { tip.textContent = idle; });
+  figBtns.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button"); if (!b) return;
+    try { localStorage.setItem("bodyFigure", b.dataset.fig); } catch (e) {}
+    draw(b.dataset.fig);
+  });
+  let fig = "male";
+  try { const saved = localStorage.getItem("bodyFigure"); if (saved && BODY[saved]) fig = saved; } catch (e) {}
+  draw(fig);
+
+  document.getElementById("bodyKey").innerHTML = `<span>sets</span><span class="c" style="background:var(--grid)"></span><span>0</span>` +
+    STEPS.map(([, v, label]) => `<span class="c" style="background:var(${v});margin-left:6px"></span><span>${label}</span>`).join("");
+  document.getElementById("bodyTable").innerHTML = `<tr><th>Muscle group</th><th>Regions on the figure</th><th class="num">Sets, last ${WINDOW_DAYS} days</th><th>Last trained</th></tr>` +
+    GROUPS.map(g => `<tr><td>${g}</td><td class="muted">${Object.values(REGION).filter(r => r[0] === g).map(r => r[1]).join(", ")}</td><td class="num">${fmtNum(sets[g])}</td><td>${agoOf(g)}</td></tr>`).join("");
+})();
+
 const exSelect = document.getElementById("exSelect");
 for (const g of GROUPS.concat(["Unknown"])) {
   const names = Object.keys(exNames).filter(n => exNames[n].g === g).sort((a, b) => exNames[b].n - exNames[a].n);
@@ -588,7 +680,7 @@ prGroup.addEventListener("change", renderPR);
 /* ---------- footer ---------- */
 document.getElementById("footer").textContent =
   `Built ${fmtDate(DATA.generated)} from the sheet export. ${DATA.sets.filter(s => !s.wu).length.toLocaleString()} working sets, ${DATA.exercises.length.toLocaleString()} exercise-days, ${DATA.cardio.length} cardio entries. ` +
-  `* = reps not logged, assumed 10. A warm-up is a first set under 80% of the sets that follow; it is shown but not counted. ${DATA.anomalies} rows needed a correction or were skipped; see data/clean/anomalies.csv.`;
+  `* = reps not logged, assumed 10. A warm-up is a first set under 80% of the sets that follow; it is shown but not counted. Body figure from react-native-body-highlighter (MIT). ${DATA.anomalies} rows needed a correction or were skipped; see data/clean/anomalies.csv.`;
 
 renderExercise(); renderVolume(); renderPR();
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderExercise(); renderVolume(); renderPR(); });

@@ -25,6 +25,15 @@ The dashboard opens with a suggested session for today. The rules (rotation, ove
 weekly set targets, double progression) are written in `PHILOSOPHY.md`; the implementation is the
 `todaySection` block in `dashboard/template.html`. Change the numbers in both places together.
 
+## Muscle map
+
+Under Today, a front and back body figure is shaded by working sets in the last 10 days. For now
+the shading is per muscle group: every region of a group shows the group's total (`REGION` in the
+`muscleMap` block of `dashboard/template.html`). The figure's outline and muscle paths are in
+`config/body_paths.json`, extracted with `scripts/extract_body.py` from
+[react-native-body-highlighter](https://github.com/HichamELBSI/react-native-body-highlighter)
+(MIT, licence text in `config/body_paths.LICENSE.txt`).
+
 ## Hosted version
 
 `.github/workflows/update.yml` runs the same three steps on GitHub Actions every day at 09:00 UTC

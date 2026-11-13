@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CLEAN = ROOT / "data" / "clean"
 TEMPLATE = ROOT / "dashboard" / "template.html"
 OUT = ROOT / "dashboard" / "index.html"
+BODY = ROOT / "config" / "body_paths.json"
 
 
 def read(name: str) -> list[dict]:
@@ -51,6 +52,8 @@ def main() -> int:
         "anomalies": len(anomalies),
     }
     html = TEMPLATE.read_text(encoding="utf-8").replace("/*__DATA__*/null", json.dumps(payload, separators=(",", ":")))
+    # body outline and muscle paths for the muscle map (from react-native-body-highlighter, MIT)
+    html = html.replace("/*__BODY__*/null", BODY.read_text(encoding="utf-8").strip())
     OUT.write_text(html, encoding="utf-8")
     print(f"wrote {OUT} ({OUT.stat().st_size / 1024:.0f} KB)")
     return 0
