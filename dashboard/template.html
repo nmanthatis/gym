@@ -57,7 +57,7 @@
   .meter .fill { height: 100%; border-radius: 4px; background: var(--seq4); }
   .meter .fill.low { background: var(--s2); }
   .meter .min { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--ink-2); }
-  .meter.overdue .lbl b { color: var(--s2); }
+  .today .recent { font-size: 13px; color: var(--ink-2); margin: -4px 0 10px; }
   section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 12px; }
   select, button { font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--axis); border-radius: 6px; padding: 5px 8px; }
@@ -97,9 +97,10 @@
 
   <section class="today">
     <h2 id="todayTitle"></h2>
+    <p class="recent" id="todayRecent"></p>
     <table id="todayTable"></table>
     <div class="meters" id="meters"></div>
-    <p class="muted" style="font-size:13px;margin:12px 0 0">Rules: rotation Chest, Shoulders, Back, Legs, Legs + accessories; a group trained in the last 2 days is skipped; a group under its weekly minimum or untrained for 9+ days is overdue and can override. Weights follow double progression, 8 to 12 reps. Sets from pressing count half for shoulders and triceps, pulling counts half for biceps. See PHILOSOPHY.md in the repo.</p>
+    <p class="muted" style="font-size:13px;margin:12px 0 0">Rules: the session is the next one in the rotation Chest, Shoulders, Back, Legs, Legs + accessories after your last session; a group trained in the last 2 days is skipped. Overdue means one thing: not trained directly for 9 or more days. An overdue main group goes ahead of the rotation, other overdue groups become add-ons (two at most). Bars count working sets in the last 7 days: warm-up sets are left out, an exercise logged without numbers counts as 3 sets, pressing counts half for shoulders and triceps, pulling half for biceps. Weights follow double progression, 8 to 12 reps. See PHILOSOPHY.md in the repo.</p>
   </section>
 
   <section>
@@ -133,7 +134,7 @@
         <button class="seg" data-weeks="52">52 weeks</button>
         <button class="seg" data-weeks="0">All</button>
       </span>
-      <span class="muted" style="font-size:13px">working sets per week, bodyweight sets included, cardio not counted.</span>
+      <span class="muted" style="font-size:13px">working sets per week, bodyweight sets included, warm-up sets and cardio not counted.</span>
     </div>
     <div class="chart"><canvas id="volChart"></canvas></div>
     <ul class="legend" id="volLegend"></ul>
@@ -201,8 +202,8 @@ document.getElementById("subtitle").innerHTML =
 (function tiles() {
   const in28 = [...trainingDays].filter(d => dayNum(d) > dayNum(today) - 28).length;
   const prev28 = [...trainingDays].filter(d => dayNum(d) > dayNum(today) - 56 && dayNum(d) <= dayNum(today) - 28).length;
-  const sets28 = DATA.sets.filter(s => dayNum(s.d) > dayNum(today) - 28).length;
-  const setsPrev = DATA.sets.filter(s => dayNum(s.d) > dayNum(today) - 56 && dayNum(s.d) <= dayNum(today) - 28).length;
+  const sets28 = DATA.sets.filter(s => !s.wu && dayNum(s.d) > dayNum(today) - 28).length;
+  const setsPrev = DATA.sets.filter(s => !s.wu && dayNum(s.d) > dayNum(today) - 56 && dayNum(s.d) <= dayNum(today) - 28).length;
   const since = dayNum(today) - dayNum(lastDate);
   const bw = DATA.bodyweight.length ? DATA.bodyweight[DATA.bodyweight.length - 1] : null;
   const delta = (cur, prev, unit) => {
@@ -252,9 +253,13 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
   const now = new Date(); const todayIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const tnum = dayNum(todayIso);
 
-  // sets per group per day (direct), and classification of each training day
+  // working sets per group per day (direct), and classification of each training day.
+  // Warm-up sets do not count; an exercise logged without numbers was still done and counts as ASSUMED_SETS.
+  const ASSUMED_SETS = 3, OVERDUE_DAYS = 9, MAX_ADDONS = 2;
   const byDay = {};
-  for (const s of DATA.sets) { const g = (exNames[s.ex] || {}).g; if (!g) continue; (byDay[s.d] ||= {})[g] = ((byDay[s.d] || {})[g] || 0) + 1; }
+  const addSets = (d, g, n) => { if (TARGET[g] === undefined) return; (byDay[d] ||= {})[g] = (byDay[d][g] || 0) + n; };
+  for (const s of DATA.sets) if (!s.wu) addSets(s.d, (exNames[s.ex] || {}).g, 1);
+  for (const e of ex) if (e.n === 0 && /\bno_sets\b/.test(e.flags || "")) addSets(e.d, e.g, ASSUMED_SETS);
   const days = Object.keys(byDay).sort();
   const classify = (d) => {
     const c = byDay[d]; let best = null;
@@ -263,8 +268,8 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
     if (best === "Legs" && ((c.Biceps || 0) + (c.Triceps || 0) + (c.Core || 0)) >= 2) return "Legs + accessories";
     return best;
   };
-  const history = days.map(classify).filter(Boolean);
-  const lastType = history[history.length - 1];
+  const sessions = days.map(d => [d, classify(d)]).filter(x => x[1]);
+  const lastType = sessions.length ? sessions[sessions.length - 1][1] : null;
 
   // fractional sets in the last 7 days, and days since each group was trained
   const frac = {}, since = {};
@@ -277,7 +282,11 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
       frac.Shoulders += 0.5 * (c.Chest || 0); frac.Triceps += 0.5 * ((c.Chest || 0) + (c.Shoulders || 0)); frac.Biceps += 0.5 * (c.Back || 0);
     }
   }
-  const overdue = Object.keys(TARGET).filter(g => frac[g] < TARGET[g][1] || since[g] >= 9);
+  // overdue = not trained directly for OVERDUE_DAYS or more, longest wait first.
+  // Being under the weekly set minimum only colours the bar; it never changes the session.
+  const sinceTxt = (g) => since[g] === Infinity ? "never trained" : since[g] === 0 ? "trained today" : `last trained ${since[g]} day${since[g] === 1 ? "" : "s"} ago`;
+  const wait = (g) => Math.min(since[g], 99999);
+  const overdue = Object.keys(TARGET).filter(g => since[g] >= OVERDUE_DAYS).sort((a, b) => wait(b) - wait(a));
   const recent48 = (g) => since[g] <= 2;
 
   // choose the session
@@ -289,21 +298,29 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
   }
   let session = ROTATION[idx];
   let why = lastType ? `next in rotation after ${lastType}` : "first session";
-  const covers = (t) => MAIN[t].filter(g => overdue.includes(g)).length + (t === "Legs + accessories" ? ACCESSORY.filter(g => overdue.includes(g)).length : 0);
-  if (overdue.length >= 2) {
-    const bestT = ROTATION.filter(t => !MAIN[t].some(recent48)).sort((a, b) => covers(b) - covers(a) || ((ROTATION.indexOf(a) - idx + 5) % 5) - ((ROTATION.indexOf(b) - idx + 5) % 5))[0];
-    if (bestT && covers(bestT) > covers(session)) { session = bestT; why = `overdue: ${overdue.map(g => g.toLowerCase()).join(", ")}`; }
+  // the rotation comes first; only an overdue main group that today's session does not cover goes ahead of it
+  const overdueMain = overdue.filter(g => MAIN[g]);
+  if (overdueMain.length && !MAIN[session].some(g => overdueMain.includes(g))) {
+    session = overdueMain[0];
+    why = `${session.toLowerCase()} ${sinceTxt(session)}, ahead of the rotation`;
   }
   const mainGroups = MAIN[session];
-  const addonGroups = overdue.filter(g => !mainGroups.includes(g) && !(session === "Legs + accessories" && ACCESSORY.includes(g)));
+  const addonGroups = overdue.filter(g => !mainGroups.includes(g) && !(session === "Legs + accessories" && ACCESSORY.includes(g))).slice(0, MAX_ADDONS);
 
-  // exercise pool per group: frequency in the last 6 months, staples done last session of this group moved to the back
-  const lastDayOf = (g) => days.filter(d => byDay[d][g]).pop();
+  // exercise pool per group: what you did in the last RECENT_SESSIONS sessions of that group comes first
+  // (most frequent first, the ones done in the very last session after the others so variants rotate);
+  // older exercises from the last 6 months only fill the list when the recent ones run out
+  const RECENT_SESSIONS = 6;
   const pool = (g) => {
-    const cut = tnum - 182; const freq = {};
-    for (const e of ex) if (e.g === g && e.n > 0 && dayNum(e.d) > cut && e.m !== "other") freq[e.ex] = (freq[e.ex] || 0) + 1;
-    const lastD = lastDayOf(g); const doneLast = new Set(ex.filter(e => e.d === lastD && e.g === g).map(e => e.ex));
-    return Object.keys(freq).sort((a, b) => (doneLast.has(a) - doneLast.has(b)) || freq[b] - freq[a]);
+    const gDays = days.filter(d => byDay[d][g]); const recentDays = new Set(gDays.slice(-RECENT_SESSIONS)); const lastD = gDays[gDays.length - 1];
+    const cut = tnum - 182; const recent = {}, older = {}, lastSeen = {}; const doneLast = new Set();
+    for (const e of ex) {
+      if (e.g !== g || e.m === "other") continue;
+      if (recentDays.has(e.d)) { recent[e.ex] = (recent[e.ex] || 0) + 1; lastSeen[e.ex] = e.d; if (e.d === lastD) doneLast.add(e.ex); }
+      else if (e.n > 0 && dayNum(e.d) > cut) older[e.ex] = (older[e.ex] || 0) + 1;
+    }
+    const first = Object.keys(recent).sort((a, b) => (doneLast.has(a) - doneLast.has(b)) || recent[b] - recent[a] || (lastSeen[a] < lastSeen[b] ? 1 : -1));
+    return first.concat(Object.keys(older).filter(n => !(n in recent)).sort((a, b) => older[b] - older[a]));
   };
   const lastPerf = (name) => ex.filter(e => e.ex === name && e.n > 0).pop();
   const suggest = (name) => {
@@ -312,7 +329,7 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
     const m = exNames[name].m;
     const lastTxt = `${fmtDate(e.d)}: ${sets.map(setLabel).join(", ")}`;
     if (m === "reps" || m === "seconds") { const best = Math.max(...sets.map(s => s.r || 0)); return { last: lastTxt, plan: `3 sets, aim for ${best + (m === "seconds" ? 10 : 1)}${m === "seconds" ? " s" : " reps"} on the best set` }; }
-    const weighted = sets.filter(s => s.w != null && s.w > 0);
+    const weighted = sets.filter(s => s.w != null && s.w > 0 && !s.wu);
     if (!weighted.length) {
       const reps = sets.map(s => s.r || 0); const allHigh = reps.length && reps.every(r => r >= 12);
       return { last: lastTxt, plan: allHigh ? "add 5 lb, 3 × 8-12" : "bodyweight, 3 × 8-12" };
@@ -330,20 +347,24 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
 
   const rows = [];
   const pick = (g, n, label) => { const p = pool(g).slice(0, n); for (const name of p) rows.push({ name, g, label, ...suggest(name) }); };
+  // a single accessory or add-on exercise: the one you did most recently for that group
+  const latestOf = (g) => { const e = ex.filter(e => e.g === g && e.m !== "other").pop(); return e ? e.ex : null; };
   if (session === "Legs") pick("Legs", 5);
-  else if (session === "Legs + accessories") { pick("Legs", 3); const acc = ACCESSORY.slice().sort((a, b) => (frac[a] - TARGET[a][1]) - (frac[b] - TARGET[b][1])); for (const g of acc.slice(0, 2)) pick(g, 1, "accessory"); rows.push({ name: "PT exercise, if any", g: "", label: "accessory", last: "", plan: "your call" }); }
+  else if (session === "Legs + accessories") { pick("Legs", 3); const acc = ACCESSORY.slice().sort((a, b) => wait(b) - wait(a)); for (const g of acc.slice(0, 2)) { const p = latestOf(g); if (p) rows.push({ name: p, g, label: "accessory", ...suggest(p) }); } rows.push({ name: "PT exercise, if any", g: "", label: "accessory", last: "", plan: "your call" }); }
   else pick(session, 4);
-  for (const g of addonGroups) { const p = pool(g)[0]; if (p) rows.push({ name: p, g, label: "add-on", ...suggest(p), plan: "2 sets, " + suggest(p).plan }); }
+  for (const g of addonGroups) { const p = latestOf(g); if (p) rows.push({ name: p, g, label: "add-on", ...suggest(p), plan: "2 sets, " + suggest(p).plan }); }
 
   document.getElementById("todayTitle").innerHTML = `Today: ${session} <span class="why">${why}${reasons.length ? " · " + reasons.join("; ") : ""}</span>`;
+  document.getElementById("todayRecent").textContent = sessions.length ? "Your last sessions: " + sessions.slice(-4).map(([d, t]) => `${fmtDate(d).replace(/, \d+$/, "")} ${t}`).join(" · ") : "";
+  const tag = (r) => !r.label ? "" : ` <span class="muted" style="font-weight:400">${r.label}${r.g && overdue.includes(r.g) ? `, ${r.g.toLowerCase()} overdue, ${sinceTxt(r.g)}` : ""}</span>`;
   document.getElementById("todayTable").innerHTML =
     `<tr><th>Exercise</th><th>Last time</th><th>Today</th></tr>` +
-    rows.map(r => `<tr class="${r.label === "add-on" ? "addon" : ""}"><td class="ex">${r.name}${r.label ? ` <span class="muted" style="font-weight:400">${r.label}${r.label === "add-on" ? ", " + r.g.toLowerCase() + " overdue" : ""}</span>` : ""}</td><td class="muted">${r.last}</td><td>${r.plan}</td></tr>`).join("");
+    rows.map(r => `<tr class="${r.label === "add-on" ? "addon" : ""}"><td class="ex">${r.name}${tag(r)}</td><td class="muted">${r.last}</td><td>${r.plan}</td></tr>`).join("");
   document.getElementById("meters").innerHTML = Object.keys(TARGET).map(g => {
     const [t, mn] = TARGET[g]; const v = frac[g]; const pct = Math.min(100, 100 * v / t); const od = overdue.includes(g);
-    const sinceTxt = since[g] === Infinity ? "never" : since[g] === 0 ? "today" : `${since[g]} d ago`;
-    return `<div class="meter ${od ? "overdue" : ""}"><div class="lbl"><span>${g} <span class="muted">· ${sinceTxt}</span></span><b>${fmtNum(v)} / ${t}</b></div><div class="bar"><div class="fill ${v < mn ? "low" : ""}" style="width:${pct}%"></div><div class="min" style="left:${100 * mn / t}%" title="minimum ${mn}"></div></div></div>`;
-  }).join("") + `<div class="meter muted" style="align-self:end">sets in the last 7 days vs target · tick = minimum</div>`;
+    const ago = since[g] === Infinity ? "never" : since[g] === 0 ? "today" : `${since[g]} d ago`;
+    return `<div class="meter"><div class="lbl"><span>${g} <span class="muted">· ${ago}</span>${od ? " · <b>overdue</b>" : ""}</span><b>${fmtNum(v)} / ${t}</b></div><div class="bar"><div class="fill ${v < mn ? "low" : ""}" style="width:${pct}%"></div><div class="min" style="left:${100 * mn / t}%" title="minimum ${mn}"></div></div></div>`;
+  }).join("") + `<div class="meter muted" style="align-self:end">working sets in the last 7 days vs target · tick = minimum · days = last direct training</div>`;
 })();
 const exSelect = document.getElementById("exSelect");
 for (const g of GROUPS.concat(["Unknown"])) {
@@ -456,7 +477,7 @@ function setLabel(s) {
   const reps = s.r == null ? "?" : fmtNum(s.r) + (s.dflt ? "*" : "");
   if (s.bwt || s.w == null) return `BW×${reps}`;
   if (s.w < 0) return `assist ${fmtNum(-s.w)}×${reps}`;
-  return `${fmtNum(s.w)}×${reps}`;
+  return `${s.wu ? "warm-up " : ""}${fmtNum(s.w)}×${reps}`;
 }
 exSelect.addEventListener("change", renderExercise);
 document.getElementById("exRange").addEventListener("click", (ev) => {
@@ -471,7 +492,7 @@ let volWeeks = 26, volChart;
 function weekStart(iso) { const n = dayNum(iso); const dow = (n + 4) % 7; /* 1970-01-01 was Thursday */ return isoFromDay(n - ((dow + 6) % 7)); }
 function renderVolume() {
   const weeks = {};
-  for (const s of DATA.sets) { const g = (exNames[s.ex] || {}).g; if (!g) continue; const w = weekStart(s.d); (weeks[w] ||= {})[g] = ((weeks[w] || {})[g] || 0) + 1; }
+  for (const s of DATA.sets) { const g = (exNames[s.ex] || {}).g; if (!g || s.wu) continue; const w = weekStart(s.d); (weeks[w] ||= {})[g] = ((weeks[w] || {})[g] || 0) + 1; }
   let labels = Object.keys(weeks).sort();
   const first = labels[0], last = weekStart(today);
   const allWeeks = []; for (let d = first; d <= last; d = addDays(d, 7)) allWeeks.push(d);
@@ -515,7 +536,7 @@ document.getElementById("volRange").addEventListener("click", (ev) => {
 /* ---------- calendar ---------- */
 (function calendar() {
   const setsPerDay = {};
-  for (const s of DATA.sets) setsPerDay[s.d] = (setsPerDay[s.d] || 0) + 1;
+  for (const s of DATA.sets) if (!s.wu) setsPerDay[s.d] = (setsPerDay[s.d] || 0) + 1;
   for (const c of DATA.cardio) setsPerDay[c.d] = (setsPerDay[c.d] || 0) + 1;
   const end = today; const start = addDays(weekStart(end), -7 * 51);
   const steps = ["--seq1", "--seq2", "--seq3", "--seq4", "--seq5", "--seq6"];
@@ -552,8 +573,8 @@ prGroup.addEventListener("change", renderPR);
 
 /* ---------- footer ---------- */
 document.getElementById("footer").textContent =
-  `Built ${fmtDate(DATA.generated)} from the sheet export. ${DATA.sets.length.toLocaleString()} sets, ${DATA.exercises.length.toLocaleString()} exercise-days, ${DATA.cardio.length} cardio entries. ` +
-  `* = reps not logged, assumed 10. ${DATA.anomalies} rows needed a correction or were skipped; see data/clean/anomalies.csv.`;
+  `Built ${fmtDate(DATA.generated)} from the sheet export. ${DATA.sets.filter(s => !s.wu).length.toLocaleString()} working sets, ${DATA.exercises.length.toLocaleString()} exercise-days, ${DATA.cardio.length} cardio entries. ` +
+  `* = reps not logged, assumed 10. A warm-up is a first set under 80% of the sets that follow; it is shown but not counted. ${DATA.anomalies} rows needed a correction or were skipped; see data/clean/anomalies.csv.`;
 
 renderExercise(); renderVolume(); renderPR();
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderExercise(); renderVolume(); renderPR(); });

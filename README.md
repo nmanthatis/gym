@@ -54,6 +54,13 @@ cleaned log, not a copy to edit.
 - an unnamed data row directly under a named empty row takes that name
 - date typos that jump back by about a year are corrected to the neighbouring year
 - `?`, `(`, `)` are stripped from numbers; a weight under 15 next to reps over 30 is swapped
+- lateral raises are two exercises, cable and machine: a row logged as plain `Sh: Lateral Raises`
+  becomes `Sh: Machine Lateral Raises` when its heaviest set is over 25 lb, otherwise
+  `Sh: Cable Lateral Raises` (`SPLIT_BY_WEIGHT` in `clean.py`)
+- a warm-up is a first set under 80% of the lightest later set, when at least two later sets are
+  within 30% of each other; it is kept with `warmup=1` in `sets.csv` and not counted in `sets`
+  (`warmup_sets` in `exercises.csv`)
+- an exercise name with no sets is kept with flag `no_sets`; the Today section counts it as done
 - on a weighted exercise, reps over 30 are a typo: with a weight the reps are dropped (defaulted to
   10, flag `reps_implausible`); with no weight the value is a weight typed in the reps column
   (flag `weight_in_reps_column`)

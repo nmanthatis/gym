@@ -40,6 +40,7 @@ def main() -> int:
     set_rows = [{
         "d": s["date"], "ex": s["exercise"], "k": int(s["set_no"]), "w": num(s["weight_lb"]),
         "r": num(s["reps"]), "bwt": s["bodyweight"] == "1", "dflt": s["reps_defaulted"] == "1",
+        "wu": s["warmup"] == "1",
     } for s in sets]
     payload = {
         "generated": date.today().isoformat(),

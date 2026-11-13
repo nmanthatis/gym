@@ -35,6 +35,13 @@ REPS_IN_WEIGHT_MAX = 15
 # on a weighted exercise, a rep count above REPS_MAX is a typo: with a weight the reps are dropped
 # (defaulted), without a weight the value is a weight typed into the reps column
 REPS_MAX = 30
+# one logged name that covers two pieces of equipment: split per exercise-day by the heaviest set
+# (limit lb, name at or under the limit, name over the limit)
+SPLIT_BY_WEIGHT = {"Sh: Lateral Raises": (25, "Sh: Cable Lateral Raises", "Sh: Machine Lateral Raises")}
+# warm-up: the first set, when it is under WARMUP_RATIO of the lightest later set and the later
+# sets (at least two) are within WORK_SPREAD of each other. Flagged, and not counted as a set.
+WARMUP_RATIO = 0.8
+WORK_SPREAD = 0.7
 GROUP_PREFIX = {"B": "Back", "Bi": "Biceps", "Ch": "Chest", "Sh": "Shoulders",
                 "Tr": "Triceps", "L": "Legs", "Co": "Core", "Ca": "Cardio"}
 
@@ -279,12 +286,24 @@ def main() -> int:
                 reps_defaulted = True
             parsed.append((k, w, r, bodyweight, reps_defaulted))
 
+        if canonical in SPLIT_BY_WEIGHT:
+            limit, light, heavy = SPLIT_BY_WEIGHT[canonical]
+            top = max((w for _, w, _, _, _ in parsed if w is not None), default=0)
+            canonical = heavy if top > limit else light
+
         if not parsed:
             ex_out.append({"date": d.isoformat(), "exercise": canonical, "group": group, "measure": measure,
                            "sets": 0, "volume_lb": "", "best_weight_lb": "", "best_reps": "", "est_1rm_lb": "",
                            "notes": "; ".join(n for n in [comments] + notes if n),
-                           "flags": " ".join(sorted(flags | {"no_sets"})), "sheet_row": row_no})
+                           "flags": " ".join(sorted(flags | {"no_sets"})), "sheet_row": row_no, "warmup_sets": 0})
             continue
+
+        warmup_k = None
+        loaded = [(k, w) for k, w, _, bodyw, _ in parsed if w is not None and w > 0 and not bodyw]
+        if len(loaded) >= 3 and loaded[0][0] == parsed[0][0]:
+            later = [w for _, w in loaded[1:]]
+            if loaded[0][1] < WARMUP_RATIO * min(later) and min(later) >= WORK_SPREAD * max(later):
+                warmup_k = loaded[0][0]
 
         vol = 0.0
         best_w, best_r, best_e1rm, best_reps_any = None, None, None, None
@@ -292,22 +311,25 @@ def main() -> int:
             sets_out.append({"date": d.isoformat(), "exercise": canonical, "group": group, "measure": measure,
                              "set_no": k, "weight_lb": fmt(w), "reps": fmt(r),
                              "bodyweight": int(bodyw), "reps_defaulted": int(defaulted),
-                             "flags": " ".join(sorted(flags)), "sheet_row": row_no})
+                             "flags": " ".join(sorted(flags)), "sheet_row": row_no,
+                             "warmup": int(k == warmup_k)})
             if r is not None:
                 best_reps_any = r if best_reps_any is None else max(best_reps_any, r)
             if w is not None and w > 0 and r is not None and not bodyw:
-                vol += w * r
+                if k != warmup_k:
+                    vol += w * r
                 e = epley(w, r)
                 if best_e1rm is None or e > best_e1rm:
                     best_e1rm = e
                 if best_w is None or w > best_w or (w == best_w and r > best_r):
                     best_w, best_r = w, r
         ex_out.append({"date": d.isoformat(), "exercise": canonical, "group": group, "measure": measure,
-                       "sets": len(parsed), "volume_lb": fmt(round(vol, 1)) if vol else "",
+                       "sets": len(parsed) - (warmup_k is not None), "volume_lb": fmt(round(vol, 1)) if vol else "",
                        "best_weight_lb": fmt(best_w), "best_reps": fmt(best_r if best_w is not None else best_reps_any),
                        "est_1rm_lb": fmt(round(best_e1rm, 1)) if best_e1rm else "",
                        "notes": "; ".join(n for n in [comments] + notes if n),
-                       "flags": " ".join(sorted(flags)), "sheet_row": row_no})
+                       "flags": " ".join(sorted(flags)), "sheet_row": row_no,
+                       "warmup_sets": int(warmup_k is not None)})
 
     # ---- write
     OUT.mkdir(parents=True, exist_ok=True)
