@@ -53,9 +53,11 @@
   .meter { font-size: 13px; }
   .meter .lbl { display: flex; justify-content: space-between; color: var(--ink-2); margin-bottom: 3px; }
   .meter .lbl b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .meter .bar { position: relative; height: 8px; border-radius: 4px; background: var(--seq1); overflow: visible; }
-  .meter .fill { height: 100%; border-radius: 4px; background: var(--seq4); }
-  .meter .fill.low { background: var(--s2); }
+  .meter .lbl { flex-wrap: wrap; gap: 0 8px; }
+  .meter .bar { position: relative; display: flex; gap: 2px; height: 8px; border-radius: 4px; background: var(--grid); overflow: visible; }
+  .meter .fill { height: 100%; border-radius: 4px; background: var(--s1); }
+  .meter .fill.ind { background: var(--s2); }
+  .meter .key { display: inline-block; width: 10px; height: 8px; border-radius: 3px; margin: 0 4px 0 0; vertical-align: baseline; }
   .meter .min { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--ink-2); }
   .today .recent { font-size: 13px; color: var(--ink-2); margin: -4px 0 10px; }
   section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
@@ -272,16 +274,18 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
   const lastType = sessions.length ? sessions[sessions.length - 1][1] : null;
 
   // fractional sets in the last 7 days, and days since each group was trained
-  const frac = {}, since = {};
-  for (const g of Object.keys(TARGET)) { frac[g] = 0; since[g] = Infinity; }
+  // direct = sets of the group's own exercises; indirect = half credit from pressing and pulling
+  const direct = {}, indirect = {}, frac = {}, since = {};
+  for (const g of Object.keys(TARGET)) { direct[g] = 0; indirect[g] = 0; since[g] = Infinity; }
   for (const d of days) {
     const c = byDay[d]; const age = tnum - dayNum(d);
     for (const g in c) { if (since[g] !== undefined) since[g] = Math.min(since[g], age); }
     if (age < 7 && age >= 0) {
-      for (const g in c) { if (frac[g] !== undefined) frac[g] += c[g]; }
-      frac.Shoulders += 0.5 * (c.Chest || 0); frac.Triceps += 0.5 * ((c.Chest || 0) + (c.Shoulders || 0)); frac.Biceps += 0.5 * (c.Back || 0);
+      for (const g in c) { if (direct[g] !== undefined) direct[g] += c[g]; }
+      indirect.Shoulders += 0.5 * (c.Chest || 0); indirect.Triceps += 0.5 * ((c.Chest || 0) + (c.Shoulders || 0)); indirect.Biceps += 0.5 * (c.Back || 0);
     }
   }
+  for (const g of Object.keys(TARGET)) frac[g] = direct[g] + indirect[g];
   // overdue = not trained directly for OVERDUE_DAYS or more, longest wait first.
   // Being under the weekly set minimum only colours the bar; it never changes the session.
   const sinceTxt = (g) => since[g] === Infinity ? "never trained" : since[g] === 0 ? "trained today" : `last trained ${since[g]} day${since[g] === 1 ? "" : "s"} ago`;
@@ -361,10 +365,13 @@ const setTxt = (s) => `${fmtNum(s.w)} × ${fmtNum(s.r)}${s.dflt ? "*" : ""}`;
     `<tr><th>Exercise</th><th>Last time</th><th>Today</th></tr>` +
     rows.map(r => `<tr class="${r.label === "add-on" ? "addon" : ""}"><td class="ex">${r.name}${tag(r)}</td><td class="muted">${r.last}</td><td>${r.plan}</td></tr>`).join("");
   document.getElementById("meters").innerHTML = Object.keys(TARGET).map(g => {
-    const [t, mn] = TARGET[g]; const v = frac[g]; const pct = Math.min(100, 100 * v / t); const od = overdue.includes(g);
+    const [t, mn] = TARGET[g]; const dv = direct[g], iv = indirect[g]; const od = overdue.includes(g);
+    const dPct = Math.min(100, 100 * dv / t), iPct = Math.min(100 - dPct, 100 * iv / t);
     const ago = since[g] === Infinity ? "never" : since[g] === 0 ? "today" : `${since[g]} d ago`;
-    return `<div class="meter"><div class="lbl"><span>${g} <span class="muted">· ${ago}</span>${od ? " · <b>overdue</b>" : ""}</span><b>${fmtNum(v)} / ${t}</b></div><div class="bar"><div class="fill ${v < mn ? "low" : ""}" style="width:${pct}%"></div><div class="min" style="left:${100 * mn / t}%" title="minimum ${mn}"></div></div></div>`;
-  }).join("") + `<div class="meter muted" style="align-self:end">working sets in the last 7 days vs target · tick = minimum · days = last direct training</div>`;
+    const nums = iv ? `<b>${fmtNum(dv)}</b> direct + <b>${fmtNum(iv)}</b> indirect / ${t}` : `<b>${fmtNum(dv)}</b> / ${t}`;
+    const seg = (cls, pct, tip) => pct > 0 ? `<div class="fill ${cls}" style="width:${pct}%" title="${tip}"></div>` : "";
+    return `<div class="meter"><div class="lbl"><span>${g} <span class="muted">· ${ago}</span>${od ? " · <b>overdue</b>" : ""}</span><span>${nums}</span></div><div class="bar">${seg("", dPct, `${fmtNum(dv)} direct sets`)}${seg("ind", iPct, `${fmtNum(iv)} indirect, half credit from pressing or pulling`)}<div class="min" style="left:${100 * mn / t}%" title="minimum ${mn}"></div></div></div>`;
+  }).join("") + `<div class="meter muted" style="align-self:end"><span class="key" style="background:var(--s1)"></span>direct sets, last 7 days <span class="key" style="background:var(--s2);margin-left:8px"></span>indirect, half credit from pressing or pulling · tick = minimum · days = last direct training</div>`;
 })();
 const exSelect = document.getElementById("exSelect");
 for (const g of GROUPS.concat(["Unknown"])) {
