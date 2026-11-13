@@ -10,16 +10,16 @@ B: Face Pulls,delt-rear;traps-mid,teres
 B: Pullups,lats,teres;biceps;traps-mid;forearm
 B: Machine Row,lats;traps-mid,teres;delt-rear;biceps
 B: Straight Arm Pulldowns,lats,teres;triceps
-L: Squat,quads;glute-max,adductors;lower-back
+L: Squat,quads;glute-lower,glute-upper;adductors;lower-back
 L: Extensions,quads,
-L: Bulgarian Split Squats,quads;glute-max,hamstrings;adductors;glute-med
-L: Deadlifts,hamstrings;glute-max;lower-back,traps-upper;forearm;quads;lats
+L: Bulgarian Split Squats,quads;glute-lower,glute-upper;glute-med;hamstrings;adductors
+L: Deadlifts,hamstrings;glute-lower;lower-back,glute-upper;traps-upper;forearm;quads;lats
 L: Curls,hamstrings,
-L: Hip Thrust,glute-max,hamstrings
-L: Abductor,glute-med,
+L: Hip Thrust,glute-upper;glute-lower,hamstrings
+L: Abductor,glute-med,glute-upper
 L: Adductor,adductors,
 L: Calf Extensions,calves,
 Co: Leg Raises,abs-lower,abs-upper
 Co: Abdominal Crunches,abs-upper,abs-lower
 Co: Lateral Abs Crunches,obliques,
-Co: Lower Back Extension,lower-back,glute-max;hamstrings
+Co: Lower Back Extension,lower-back,glute-upper;glute-lower;hamstrings

@@ -414,10 +414,10 @@ let workByDay = {};   // working sets per group per day, filled by the Today sec
     "traps-upper": "Upper trapezius", "traps-mid": "Mid and lower trapezius", lats: "Lats", teres: "Teres and rear cuff", "lower-back": "Lower back",
     biceps: "Biceps", triceps: "Triceps", forearm: "Forearms",
     "abs-upper": "Upper abs", "abs-lower": "Lower abs", obliques: "Obliques", serratus: "Serratus",
-    "glute-max": "Glutes", "glute-med": "Outer glutes", quads: "Quadriceps", adductors: "Adductors", hamstrings: "Hamstrings", calves: "Calves", tibialis: "Shins",
+    "glute-med": "Gluteus medius", "glute-upper": "Upper gluteus maximus", "glute-lower": "Lower gluteus maximus", quads: "Quadriceps", adductors: "Adductors", hamstrings: "Hamstrings", calves: "Calves", tibialis: "Shins",
   };
   // an exercise without a row in config/exercise_muscles.csv credits its group's main regions
-  const FALLBACK = { Chest: ["chest-upper", "chest-lower"], Shoulders: ["delt-front", "delt-side", "delt-rear"], Back: ["lats", "traps-mid", "teres"], Biceps: ["biceps"], Triceps: ["triceps"], Core: ["abs-upper", "abs-lower"], Legs: ["quads", "hamstrings", "glute-max"] };
+  const FALLBACK = { Chest: ["chest-upper", "chest-lower"], Shoulders: ["delt-front", "delt-side", "delt-rear"], Back: ["lats", "traps-mid", "teres"], Biceps: ["biceps"], Triceps: ["triceps"], Core: ["abs-upper", "abs-lower"], Legs: ["quads", "hamstrings", "glute-lower"] };
   const FULL = 10;   // sets at which the shading reaches its strongest colour
   const now = new Date(); const tnum = dayNum(new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
 
@@ -449,7 +449,7 @@ let workByDay = {};   // working sets per group per day, filled by the Today sec
       case "deltoids": return view === "back" ? "delt-rear" : null;
       case "trapezius": return view === "front" ? "traps-upper" : null;
       case "upper-back": return b.height > 150 ? "lats" : "teres";
-      case "gluteal": return b.height < 80 ? "glute-med" : "glute-max";
+      case "gluteal": return b.height < 80 ? "glute-med" : null;
       case "abs": return b.y + b.height / 2 < 535 ? "abs-upper" : "abs-lower";
       case "obliques": return b.y < 470 ? "serratus" : "obliques";
       case "quadriceps": return "quads";
@@ -471,6 +471,10 @@ let workByDay = {};   // working sets per group per day, filled by the Today sec
       const x0 = leftOfMid ? b.x : b.x + b.width, w = leftOfMid ? b.width : -b.width;   // from the outer edge inwards
       const xt = x0 + 0.62 * w, xb = x0 + 0.18 * w;
       return ["delt-front", [[xt, top], [inner, top], [inner, bot], [xb, bot]], "delt-side", [[xt, top], [outer, top], [outer, bot], [xb, bot]], [[xt, top], [xb, bot]]];
+    }
+    if (slug === "gluteal") {   // gluteus maximus: the fibres run down and outwards, so the cut does too
+      const yi = b.y + 0.30 * b.height, yo = b.y + 0.60 * b.height;
+      return ["glute-upper", [[inner, top], [outer, top], [outer, yo], [inner, yi]], "glute-lower", [[inner, yi], [outer, yo], [outer, bot], [inner, bot]], [[inner, yi], [outer, yo]]];
     }
     const y = b.y + 0.33 * b.height;   // trapezius, back view
     return ["traps-upper", [[inner, top], [outer, top], [outer, y], [inner, y]], "traps-mid", [[inner, y], [outer, y], [outer, bot], [inner, bot]], [[inner, y], [outer, y]]];

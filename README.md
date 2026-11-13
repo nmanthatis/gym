@@ -32,13 +32,14 @@ Under Today, a front and back body figure is shaded by working sets per muscle i
 - `config/exercise_muscles.csv` says which muscles each exercise trains: `primary` muscles get the
   full set, `secondary` muscles half a set (`;` separated). An exercise without a row credits the
   main muscles of its group (`FALLBACK` in the `muscleMap` block of `dashboard/template.html`).
-- The 24 muscle names are the keys of `NAME` in that block: `chest-upper`, `chest-lower`,
+- The 25 muscle names are the keys of `NAME` in that block: `chest-upper`, `chest-lower`,
   `delt-front`, `delt-side`, `delt-rear`, `traps-upper`, `traps-mid`, `lats`, `teres`,
   `lower-back`, `biceps`, `triceps`, `forearm`, `abs-upper`, `abs-lower`, `obliques`, `serratus`,
-  `glute-max`, `glute-med`, `quads`, `adductors`, `hamstrings`, `calves`, `tibialis`.
-- The figure draws chest, front deltoid and rear trapezius as single shapes; the page cuts each in
-  two along a line (`cutOf`) to get upper and lower chest, front and side deltoid, upper and
-  mid trapezius. The other regions come from the figure's own shapes (`regionOf`).
+  `glute-med`, `glute-upper`, `glute-lower`, `quads`, `adductors`, `hamstrings`, `calves`, `tibialis`.
+- The figure draws chest, front deltoid, rear trapezius and gluteus maximus as single shapes; the
+  page cuts each in two along a line (`cutOf`) to get upper and lower chest, front and side
+  deltoid, upper and mid trapezius, upper and lower gluteus maximus. The other regions come from
+  the figure's own shapes (`regionOf`).
 
 The figure's outline and muscle paths are in
 `config/body_paths.json`, extracted with `scripts/extract_body.py` from
