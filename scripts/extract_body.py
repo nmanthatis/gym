@@ -38,8 +38,7 @@ data = {
     "source": "https://github.com/HichamELBSI/react-native-body-highlighter",
     "license": "MIT, Copyright (c) 2022 ELABBASSI Hicham",
 }
-for gender, wrap, front, back in (("male", "components_SvgMaleWrapper.tsx", "assets_bodyFront.ts", "assets_bodyBack.ts"),
-                                  ("female", "components_SvgFemaleWrapper.tsx", "assets_bodyFemaleFront.ts", "assets_bodyFemaleBack.ts")):
+for gender, wrap, front, back in (("male", "components_SvgMaleWrapper.tsx", "assets_bodyFront.ts", "assets_bodyBack.ts"),):
     vb, outlines = wrapper(wrap)
     data[gender] = {
         "front": {"viewBox": vb["front"], "outline": outlines["front"], "parts": parts(front)},

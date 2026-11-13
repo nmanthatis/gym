@@ -120,10 +120,6 @@
     <h2>Muscle map</h2>
     <div class="controls">
       <span class="muted" style="font-size:13px">working sets in the last 10 days, by muscle group</span>
-      <span class="seggroup" id="bodyFigure" style="margin-left:auto">
-        <button class="seg" data-fig="male">Male figure</button>
-        <button class="seg" data-fig="female">Female figure</button>
-      </span>
     </div>
     <div class="bodies" id="bodies"></div>
     <p class="bodytip" id="bodyTip"></p>
@@ -432,7 +428,7 @@ let workByDay = {};   // working sets per group per day, filled by the Today sec
   const agoOf = (g) => since[g] === Infinity ? "never trained" : since[g] === 0 ? "trained today" : `last trained ${since[g]} day${since[g] === 1 ? "" : "s"} ago`;
   const tipOf = (slug, html) => { const [g, name] = REGION[slug]; return `${html ? `<b>${name}</b>` : name}: ${fmtNum(sets[g])} ${WORD[g]} sets in the last ${WINDOW_DAYS} days, ${agoOf(g)}`; };
 
-  const bodies = document.getElementById("bodies"), tip = document.getElementById("bodyTip"), figBtns = document.getElementById("bodyFigure");
+  const bodies = document.getElementById("bodies"), tip = document.getElementById("bodyTip");
   const idle = "Hover or tap a muscle";
   const draw = (fig) => {
     const view = (side, label) => {
@@ -443,21 +439,13 @@ let workByDay = {};   // working sets per group per day, filled by the Today sec
       return `<figure><svg viewBox="${v.viewBox}" role="img" aria-label="${label} of the body, muscles shaded by working sets in the last ${WINDOW_DAYS} days">${v.outline.map(d => `<path class="outline" d="${d}"/>`).join("")}${parts}</svg><figcaption>${label}</figcaption></figure>`;
     };
     bodies.innerHTML = view("front", "Front") + view("back", "Back");
-    for (const b of figBtns.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.fig === fig);
     tip.textContent = idle;
   };
   const show = (ev) => { const p = ev.target.closest(".muscle"); if (p) tip.innerHTML = tipOf(p.dataset.slug, true); };
   bodies.addEventListener("pointerover", show);
   bodies.addEventListener("click", show);
   bodies.addEventListener("pointerleave", () => { tip.textContent = idle; });
-  figBtns.addEventListener("click", (ev) => {
-    const b = ev.target.closest("button"); if (!b) return;
-    try { localStorage.setItem("bodyFigure", b.dataset.fig); } catch (e) {}
-    draw(b.dataset.fig);
-  });
-  let fig = "male";
-  try { const saved = localStorage.getItem("bodyFigure"); if (saved && BODY[saved]) fig = saved; } catch (e) {}
-  draw(fig);
+  draw("male");
 
   document.getElementById("bodyKey").innerHTML = `<span>sets</span><span class="c" style="background:var(--grid)"></span><span>0</span>` +
     STEPS.map(([, v, label]) => `<span class="c" style="background:var(${v});margin-left:6px"></span><span>${label}</span>`).join("");
