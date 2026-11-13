@@ -408,12 +408,19 @@ function renderExercise() {
     legend = [];
   }
   for (const d of datasets) Object.assign(d, { borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: surface, pointBorderWidth: 2, tension: 0, spanGaps: true });
+  // estimated 1RM is background context: faint, thin, no markers, drawn behind the best-set line
+  if (weightMode) {
+    const faint = /^#[0-9a-f]{6}$/i.test(c2) ? c2 + "59" : c2;
+    Object.assign(datasets[1], { borderColor: faint, backgroundColor: faint, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, pointBorderWidth: 0, order: 1 });
+    datasets[0].order = 0;
+    legend[1][1] = faint;
+  }
 
   // PR line
   const prEl = document.getElementById("exPr");
   if (weightMode) {
     const { e1, heavy } = recordsOf(name);
-    prEl.innerHTML = e1 ? `Best estimated 1RM <b>${fmtNum(e1.e)} lb</b> (${setTxt(e1)} on ${fmtDate(e1.d)}) · heaviest set <b>${setTxt(heavy)}</b> on ${fmtDate(heavy.d)} · ${all.length} sessions, last ${fmtDate(meta.last)}` : `${all.length} sessions, bodyweight only · last ${fmtDate(meta.last)}`;
+    prEl.innerHTML = e1 ? `Heaviest set <b>${setTxt(heavy)}</b> on ${fmtDate(heavy.d)} · ${all.length} sessions, last ${fmtDate(meta.last)} · <span class="muted">est. 1RM ${fmtNum(e1.e)} lb</span>` : `${all.length} sessions, bodyweight only · last ${fmtDate(meta.last)}`;
   } else {
     const best = all.filter(e => e.br != null).reduce((b, e) => (!b || e.br > b.br) ? e : b, null);
     prEl.innerHTML = best ? `Best set <b>${fmtNum(best.br)}</b> on ${fmtDate(best.d)} · ${all.length} sessions, last ${fmtDate(meta.last)}` : `${all.length} sessions`;
